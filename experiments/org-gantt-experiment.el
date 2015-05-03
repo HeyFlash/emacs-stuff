@@ -34,28 +34,131 @@ of the given element. timestamp-type is either ':scheduled or ':deadline"
   (lambda (subelement) (org-element-property timestamp-type subelement))
   nil t 'headline))
 
+(defun org-gantt-get-subheadlines (element)
+  (org-element-map element 'headline (lambda (subelement) subelement)
+		   nil nil 'headline))
+
+(defun org-gantt-tp< (tp1 tp2 key)
+  "Time property smaller, works with nil."
+  (and (org-element-property key tp1)
+       (or (not (org-element-property key tp2))
+	   (< (org-element-property key tp1) (org-element-property key tp2)))))
+
+(defun org-gantt-timestamp-smaller (ts1 ts2)
+  "Returns true iff timestamp ts1 is before ts2"
+  (and ts1
+       (or (not ts2)
+	   (org-gantt-tp< ts1 ts2 ':year-start)
+	   (org-gantt-tp< ts1 ts2 ':month-start)
+	   (org-gantt-tp< ts1 ts2 ':day-start)
+	   (org-gantt-tp< ts1 ts2 ':hour-start)
+	   (org-gantt-tp< ts1 ts2 ':minute-start))))
+
+(defun org-gantt-subheadline-extreme (element comparator time-getter)
+  "Returns the smallest/largest timestamp of the subheadlines 
+of element according to comparator.
+time-getter is the recursive function that needs to be called if 
+the subheadlines have no timestamp."
+  (and
+   element
+   (let ((subheadlines (org-gantt-get-subheadlines element)))
+     (funcall
+      time-getter
+      (car
+       (sort
+	subheadlines
+	(lambda (hl1 hl2)
+	  (funcall comparator
+		   (funcall time-getter hl1)
+		   (funcall time-getter hl2)))))))))
+
 (defun org-gantt-get-start-time (element)
 ""
 (or
  (org-gantt-get-planning-timestamp element ':scheduled)
- ;; here take min of org-gantt-get-start-time of all subheadlines.
- ))
+ (org-gantt-subheadline-extreme
+  (cdr element)
+  #'org-gantt-timestamp-smaller
+  #'org-gantt-get-start-time)))
 
 (defun org-gantt-get-end-time (element)
 ""
 (or
  (org-gantt-get-planning-timestamp element ':deadline)
- ;;here take max of gantt-get-end-time of all subheadlines.
- ))
+ (org-gantt-subheadline-extreme
+  (cdr element)
+  (lambda (ts1 ts2)
+    (not (org-gantt-timestamp-smaller ts1 ts2)))
+  #'org-gantt-get-end-time)))
 
 (defun org-gantt-create-gantt-info (element)
   "Creates a gantt-info for element.
 A gantt-info is a plist containing :name :start :end"
   (list ':name (org-element-property ':raw-value element)
+	':ordered (org-element-property ':ordered element)
         ':start (org-gantt-get-start-time element)
         ':end (org-gantt-get-end-time element)
         ':subelements (org-gantt-crawl-headlines (cdr element) nil nil nil)))
 
+;; (defun org-gantt-subpropagate-start-date (element start-date)
+;;   "Propagates end date from one subelement to start date of next subelement,
+;; if element is ordered."
+;;   (let ((subelements (plist-get element :subelements))
+;; 	(ordered (plist-get element :ordered)))
+;;     (if ordered
+;; 	(dolist (se subelements)
+;; 	  (let ((end (plist-get se :end)))
+;; 	    (if end
+;; 		))))))
+
 (defun org-gantt-crawl-headlines (data parent-start parent-end sorted)
-""
-(org-element-map data 'headline #'org-gantt-create-gantt-info nil nil 'headline))
+  ""
+  (let ((gantt-info-list
+	 (org-element-map data 'headline #'org-gantt-create-gantt-info nil nil 'headline)))
+    gantt-info-list))
+
+(defun org-gantt-timestamp-to-string (timestamp)
+  "should be replaced by org-timestamp-format, but that doesn't seem to work."
+  (let ((ts (cadr timestamp)))
+    (concat
+     (number-to-string (plist-get ts ':year-start))
+     "-"
+     (number-to-string (plist-get ts ':month-start))
+     "-"
+     (number-to-string (plist-get ts ':day-start))
+     )))
+
+(defun org-gantt-info-to-pgfgantt (gi &optional prefix)
+  "Creates a pgfgantt string from gantt-info gi"
+  (let ((subelements (plist-get gi ':subelements)))
+    (concat
+     prefix
+     (if subelements
+	 "\\ganttgroup"
+       "\\ganttbar")
+     "{" (plist-get gi ':name) "}"
+     "{"
+     (when (plist-get gi ':start)
+       (org-gantt-timestamp-to-string (plist-get gi ':start)))
+     "}"
+     "{"
+     (when (plist-get gi ':end)
+       (org-gantt-timestamp-to-string (plist-get gi ':end)))
+     "}"
+     "\\\\\n"
+     (when subelements
+       (org-gantt-info-list-to-pgfgantt
+	subelements
+	(concat prefix "  "))))))
+
+(defun org-gantt-info-list-to-pgfgantt (data &optional prefix)
+  "Gets a list of gantt-info-objects.
+Returns a pgfgantt string representing that data."
+  (mapconcat (lambda (datum) (org-gantt-info-to-pgfgantt datum prefix)) data ""))
+
+
+(defun org-dblock-write:pgf-gantt-chart (params)
+  "The function that is called for updating gantt chart code"
+  (insert
+   (org-gantt-info-list-to-pgfgantt
+    (org-gantt-crawl-headlines (org-element-parse-buffer) nil nil nil))))
