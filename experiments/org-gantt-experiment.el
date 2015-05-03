@@ -160,5 +160,8 @@ Returns a pgfgantt string representing that data."
 (defun org-dblock-write:pgf-gantt-chart (params)
   "The function that is called for updating gantt chart code"
   (insert
-   (org-gantt-info-list-to-pgfgantt
-    (org-gantt-crawl-headlines (org-element-parse-buffer) nil nil nil))))
+   (concat
+    "\\begin{ganttchart}[time slot format=isodate]{2015-05-01>}{2015-06-30}\n"
+    (org-gantt-info-list-to-pgfgantt
+     (org-gantt-crawl-headlines (org-element-parse-buffer) nil nil nil))
+    "\\end{ganttchart}")))
