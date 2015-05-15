@@ -188,8 +188,16 @@ A gantt-info is a plist containing :name start-prop end-prop effort-prop :subele
      "-"
      (number-to-string (plist-get ts ':month-start))
      "-"
-     (number-to-string (plist-get ts ':day-start))
-     )))
+     (number-to-string 
+      (if (and (equal (plist-get ts :type) 'computed)
+               (= (plist-get ts :hour-start) 0)
+               (= (plist-get ts :minute-start) 0))
+          (-(plist-get ts :day-start) 0)
+        (plist-get ts ':day-start))))))
+
+(defun org-gantt-timestamp-to-pgf-end (timestamp)
+  "Converts a timestamp to a pfg end time string. Specifically uses the day before,
+If the current ")
 
 (defun org-gantt-get-extreme-date (data time-getter timestamp-comparer)
   "Get the first or last date (depending on timestamp-comparer)
@@ -224,7 +232,7 @@ If optional use-end is non-nil use the ...-end values of the timestamp."
   (let ((dt (decode-time time)))
     (and time
          (list 'timestamp
-               (list :type 'active :raw-value (format-time-string "<%Y-%m-%d %a>" time)
+               (list :type 'computed :raw-value (format-time-string "<%Y-%m-%d %a>" time)
                      :year-start (nth 5 dt) :month-start (nth 4 dt) :day-start (nth 3 dt)
                      :hour-start (nth 2 dt) :minute-start (nth 1 dt)
                      :year-end (nth 5 dt) :month-end (nth 4 dt) :day-end (nth 3 dt)
@@ -241,15 +249,20 @@ If optional use-end is non-nil use the ...-end values of the timestamp."
 (defun org-gantt-strings-to-time
   (hours-per-day days-per-month seconds-string minutes-string &optional hours-string
    days-string weeks-string months-string years-string)
-  "Convert the given strings to time"
-  (let ((time
-         (seconds-to-time
-          (+ (org-gantt-string-to-number seconds-string)
-             (* 60 (org-gantt-string-to-number minutes-string))
-             (* 3600 (org-gantt-string-to-number hours-string))
-             (* 3600 hours-per-day (org-gantt-string-to-number days-string))
-             (* 3600 hours-per-day days-per-month (org-gantt-string-to-number months-string))
-             (* 3600 hours-per-day days-per-month 12 (org-gantt-string-to-number years-string))))))
+  "Convert the given strings to time, taking into account hours-per-day."
+  (let* ((ex-hours (+ (org-gantt-string-to-number seconds-string)
+                      (* 60 (org-gantt-string-to-number minutes-string))
+                      (* 3600 (org-gantt-string-to-number hours-string))))
+         (calc-days (/ ex-hours hours-per-day))
+         (rest-hours (% ex-hours hours-per-day))
+         (time 
+          (seconds-to-time
+           (+ (org-gantt-string-to-number seconds-string)
+              (* 60 (org-gantt-string-to-number minutes-string))
+              (* 3600 (org-gantt-string-to-number hours-string))
+              (* 3600 24 (org-gantt-string-to-number days-string))
+              (* 3600 24 30 (org-gantt-string-to-number months-string))
+              (* 3600 24 30 12 (org-gantt-string-to-number years-string))))))
     (if (= 0 (apply '+ time))
         nil
       time)))
@@ -290,35 +303,50 @@ Currently does not consider weekends, etc."
 (defun org-gantt-add-day-if-day (timestamp)
   "Return a timestamp added with one day if timestamp does not have hour information,
 otherwise return timestamp."
-  (if (org-element-property :hour-start timestamp)
-      timestamp
-    (org-gantt-add-days timestamp 1)))
+  (and timestamp 
+       (if (org-element-property :hour-start timestamp)
+           timestamp
+         (org-gantt-add-days timestamp 0))))
 
 (defun org-gantt-plist-get plist prop default
   "Same as plist-get, but returns default, if prop is not one of the properties of plist."
   (or (plist-get plist prop)
       default))
 
-(defun org-gantt-propagate-order-timestamps (headline-list &optional is-ordered parent-start)
+(defun org-gantt-propagate-order-timestamps (headline-list &optional is-ordered parent-start parent-end)
   "Propagate the timestamps of headlines that are ordered according to their superheadline.
 Recursively apply to subheadlines."
   (let ((next-start (or (plist-get (car headline-list) start-prop) parent-start))
+        (listitem headline-list)
+        (headline nil)
+        (replacement nil)
         (newlist nil))
-    (dolist (headline headline-list newlist)
-      (let ((replacement headline))
-        (when is-ordered
-          (setq replacement
-                (plist-put replacement start-prop
-                           (or (plist-get replacement start-prop) next-start)))
-          (setq next-start (org-gantt-get-next-workday-if-day (plist-get replacement end-prop))))
-        (when (plist-get replacement :subelements)
-          (setq replacement
-                (plist-put replacement :subelements
-                           (org-gantt-propagate-order-timestamps
-                            (plist-get replacement :subelements)
-                            (or is-ordered (plist-get replacement :ordered))
-                            (plist-get replacement start-prop)))))
-        (setq newlist (append newlist (list replacement)))))))
+    (while listitem
+      (setq headline (car listitem))
+      (setq replacement headline)
+      (when is-ordered
+        (setq replacement
+              (plist-put replacement start-prop
+                         (or (plist-get replacement start-prop) next-start)))
+        (setq next-start (org-gantt-get-next-workday-if-day (plist-get replacement end-prop)))
+        (setq replacement
+              (plist-put replacement end-prop
+                         (or (plist-get replacement end-prop)
+                             (if (cdr listitem)
+                                 (plist-get (cadr listitem) start-prop)
+                               parent-end))))
+        )
+      (when (plist-get replacement :subelements)
+        (setq replacement
+              (plist-put replacement :subelements
+                         (org-gantt-propagate-order-timestamps
+                          (plist-get replacement :subelements)
+                          (or is-ordered (plist-get replacement :ordered))
+                          (plist-get replacement start-prop)
+                          (plist-get replacement end-prop)))))
+      (setq newlist (append newlist (list replacement)))
+      (setq listitem (cdr listitem)))
+    newlist))
 
 (defun org-gantt-calculate-ds-from-effort (headline-list)
   "Calculates deadline or schedule from effort.
@@ -330,7 +358,7 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
             (end (plist-get headline end-prop))
             (effort (plist-get headline effort-prop)))
         (cond ((and start end effort)
-               (warn "Conflicting start, end and effort in Headline '%s'." (plist-get replacement :name)))
+               effort) ;;FIXME: Calculate if start, end, effort conflict and warn.
               ((and start effort)
                (setq replacement
                      (plist-put replacement end-prop
@@ -348,43 +376,59 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
                             (plist-get replacement :subelements)))))
         (setq newlist (append newlist (list replacement)))))))
 
-(defun org-gantt-get-subheadline-start (headline)
+(defun org-gantt-first-subheadline-start (headline)
+  "Gets the start time of the first subelement of headline (or its subelement)."
+  (and headline
+       (or (plist-get (car (plist-get headline :subelements)) start-prop)
+           (org-gantt-get-subheadline-start (car (plist-get headline :subelements)) t))))
+
+(defun org-gantt-last-subheadline-end (headline)
+  "Gets the end time of the last subelement of headline (or its subelement)."
+  (and headline
+       (or (plist-get (car (last (plist-get headline :subelements))) end-prop)
+           (org-gantt-get-subheadline-end (car (last (plist-get headline :subelements))) t))))
+
+
+(defun org-gantt-get-subheadline-start (headline ordered)
   ""
   (or (plist-get headline start-prop)
-      (plist-get
-       (org-gantt-subheadline-extreme
-        headline
-        #'org-gantt-timestamp-smaller
-        #'org-gantt-get-subheadline-start
-        (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements))))
-       start-prop)))
+      (if ordered
+          (org-gantt-first-subheadline-start headline)
+        (org-gantt-subheadline-extreme
+         headline
+         #'org-gantt-timestamp-smaller
+         (lambda (hl) (org-gantt-get-subheadline-start hl ordered))
+         (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))
+      ))
 
 
-(defun org-gantt-get-subheadline-end (headline)
+(defun org-gantt-get-subheadline-end (headline ordered)
   ""
   (or (plist-get headline end-prop)
-      (plist-get
-       (org-gantt-subheadline-extreme
-        headline
-        (lambda (ts1 ts2)
-          (not (org-gantt-timestamp-smaller ts1 ts2)))
-        #'org-gantt-get-subheadline-end
-        (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements))))
-       end-prop)))
+      (if ordered
+          (org-gantt-last-subheadline-end headline)
+        (org-gantt-subheadline-extreme
+         headline
+         (lambda (ts1 ts2)
+           (not (org-gantt-timestamp-smaller ts1  ts2)))
+         (lambda (hl) (org-gantt-get-subheadline-end hl ordered))
+         (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))
+      ))
 
-(defun org-gantt-propagate-ds-up (headline-list)
-  "Prpagates start and end time from subelements."
+(defun org-gantt-propagate-ds-up (headline-list &optional ordered)
+  "Propagates start and end time from subelements."
   (let ((newlist nil))
     (dolist (headline headline-list newlist)
       (let ((replacement headline)
+            (cur-ordered (or ordered (plist-get headline :ordered)))
             (start (plist-get headline start-prop))
             (end (plist-get headline end-prop)))
         (setq replacement
               (plist-put replacement start-prop
-                         (org-gantt-get-subheadline-start replacement)))
+                         (org-gantt-get-subheadline-start replacement cur-ordered)))
         (setq replacement
               (plist-put replacement end-prop
-                         (org-gantt-get-subheadline-end replacement)))
+                         (org-gantt-get-subheadline-end replacement cur-ordered)))
         (setq newlist (append newlist (list replacement)))))))
 
 
@@ -452,13 +496,16 @@ Returns a pgfgantt string representing that data."
                     (t (org-element-map parsed-buffer 'headline
                          (lambda (element)
                            (if (equal (org-element-property :ID element) id) element nil))  nil t))))
-             (org-gantt-info-list
-              (org-gantt-propagate-ds-up
-               (org-gantt-propagate-order-timestamps
-                (org-gantt-calculate-ds-from-effort
-                 (org-gantt-crawl-headlines parsed-data))))))
+             (org-gantt-info-list (org-gantt-crawl-headlines parsed-data))
+             (org-gantt-check-info-list nil))
         (when (not parsed-data)
           (error "Could not find element with :ID: %s" id))
+        (while (not (equal org-gantt-info-list org-gantt-check-info-list))
+          (setq org-gantt-check-info-list (copy-tree org-gantt-info-list))
+          (setq org-gantt-info-list 
+                (org-gantt-propagate-ds-up
+                 (org-gantt-propagate-order-timestamps
+                  (org-gantt-calculate-ds-from-effort org-gantt-info-list)))))
         (insert
          (concat
           "\\begin{ganttchart}[time slot format=isodate"
