@@ -463,6 +463,30 @@ Returns a pgfgantt string representing that data."
    (org-gantt-info-to-pgfgantt (car data) prefix ordered nil)
    (mapconcat (lambda (datum) (org-gantt-info-to-pgfgantt datum prefix ordered ordered)) (cdr data) "")))
 
+(defun org-gantt-days-to-vgrid-style (weekend workday weekend-style workday-style)
+  (or 
+   (when weekend
+     (concat "*" (number-to-string weekend) weekend-style))
+   (when workday
+     (concat "*" (number-to-string workday) workday-style))))
+
+(defun org-gantt-get-vgrid-style (start-time weekend-style workday-style)
+  "Computes a vgrid style from the start date, marking weekends."
+  (let* ((dow (string-to-number (format-time-string "%w" start-time)))
+         (weekend-start (and (< dow 3) (1+ dow)))
+         (work-start (and (>= dow 3) (- dow 2)))
+         (weekend-middle (and (not weekend-start) 3))
+         (work-middle (and (not work-start) 4))
+         (weekend-end (and weekend-start (< weekend-start 3) (- 3 weekend-start)))
+         (work-end (and work-start (< work-start 4) (- 4 work-start))))
+    (concat 
+     "{"
+     (org-gantt-days-to-vgrid-style weekend-start work-start weekend-style workday-style)
+     ","
+     (org-gantt-days-to-vgrid-style weekend-middle work-middle weekend-style workday-style)
+     (when (or weekend-end work-end) ",")
+     (org-gantt-days-to-vgrid-style weekend-end work-end weekend-style workday-style)
+     "}")))
 
 (defun org-dblock-write:pgf-gantt-chart (params)
   "The function that is called for updating gantt chart code"
@@ -479,8 +503,7 @@ Returns a pgfgantt string representing that data."
 	     (setq view-file (match-string 1 id-as-string)
 		   view-pos 1)
 	     (unless (file-exists-p view-file)
-	       (error "No such file: \"%s\"" id-as-string)))
-	    ))
+	       (error "No such file: \"%s\"" id-as-string)))))
     (with-current-buffer
         (if view-file
             (get-file-buffer view-file)
@@ -489,6 +512,8 @@ Returns a pgfgantt string representing that data."
              (start-date (plist-get params start-prop))
              (end-date (plist-get params end-prop))
              (additional-parameters (plist-get params :parameters))
+             (weekend-style (or (plist-get params :weekend-style) "{black}"))
+             (workday-style (or (plist-get params :workday-style) "{dashed}"))
              (parsed-buffer (org-element-parse-buffer))
              (parsed-data
               (cond ((or (not id) (eq id 'global) view-file) parsed-buffer)
@@ -508,7 +533,12 @@ Returns a pgfgantt string representing that data."
                   (org-gantt-calculate-ds-from-effort org-gantt-info-list)))))
         (insert
          (concat
-          "\\begin{ganttchart}[time slot format=isodate"
+          "\\begin{ganttchart}[time slot format=isodate, "
+          "vgrid="
+          (org-gantt-get-vgrid-style 
+           (org-gantt-timestamp-to-time 
+            (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'org-gantt-timestamp-smaller))
+           weekend-style workday-style)
           (when additional-parameters
             (concat ", " additional-parameters))
           "]{"
