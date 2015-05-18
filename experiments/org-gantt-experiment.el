@@ -127,6 +127,27 @@ the subheadlines have no timestamp."
   #'org-gantt-get-end-time
   #'org-gantt-get-subheadlines)))
 
+(defun org-gantt-sum-times (e1 e2 hours-per-workday day-adder)
+  "Sums e1 and e2, taking into account hours-per-workday."
+  (let* ((e1time (decode-time e1))
+         (e2time (decode-time e2))
+         (e1min (nth 1 e1time))
+         (e2min (nth 1 e2time))
+         (e1hour (nth 2 e1time))
+         (e2hour (nth 2 e2time))
+         (minsum (+ e1min e2min))
+         (hoursum (+ e1hour e2hour))
+         (totalmin (% minsum 60))
+         (totalhour (+ hoursum (/ minsum 60)))
+         (e1trunc (encode-time 0 0 0 (nth 3 e1time) (nth 4 e1time) (nth 5 e1time)))
+         (e2trunc (encode-time 0 0 0 (nth 3 e2time) (nth 4 e2time) (nth 5 e2time)))
+         (adddays (/ totalhour hours-per-workday))
+         (addtime (seconds-to-time
+                   (+ (* 60 totalmin)
+                      (* 3600 totalhour))))
+         (truncsum (time-add e1trunc e2trunc))
+         (withtime (time-add truncsum addtime)))
+    (funcall day-adder withtime adddays)))
 
 (defun org-gantt-subheadlines-effort (element effort-getter)
   "Returns the sum of the efforts of the subheadlines
@@ -141,7 +162,9 @@ the subheadlines have no effort."
        (let ((subtime (funcall effort-getter sh)))
          (when subtime
            (setq time-sum
-                 (time-add time-sum subtime))))))))
+                 (org-gantt-sum-times 
+                  time-sum subtime org-gantt-default-hours-per-day
+                  #'org-gantt-add-days))))))))
 
 
 (defun org-gantt-get-effort (element &optional use-subheadlines-effort)
@@ -295,6 +318,24 @@ Optional hours-per-day makes it possible to convert hour estimates into workdays
                                     days-string weeks-string
                                     months-string years-string))))
 
+(defun org-gantt-is-workday (time)
+  "Returns non-nil, iff time is a workday. Currently does not consider holidays."
+  (let ((dow (string-to-number (format-time-string "%w" time))))
+    (and (/= dow 6)
+         (/= dow 0))))
+
+(defun org-gantt-change-workdays (timestamp ndays change-function &optional timestamp-type)
+  "Add or subtract (depending on change-function) ndays workdays to the given timestamp. 
+E.g. if timestamp is on Friday, ndays is one, the result will be monday."
+  (cl-assert (>= ndays 0) "trying to add negative days to timestamp.")
+  (let ((oneday (days-to-time 1))
+        (curtime (org-gantt-timestamp-to-time timestamp)))
+    (while (/= 0 ndays)
+      (setq curtime (funcall change-function curtime oneday))
+      (when (org-gantt-is-workday curtime)
+        (setq ndays (- ndays 1))))
+    (org-gantt-time-to-timestamp curtime timestamp-type)))
+
 (defun org-gantt-add-days (timestamp ndays)
   "Return a timestamp ndays advanced from the given timestamp"
   (org-gantt-time-to-timestamp
@@ -304,9 +345,10 @@ Optional hours-per-day makes it possible to convert hour estimates into workdays
   "Returns the next workday for the given timestamp, if the timestamp does not contain hour data.
 If timestamp contains hour data, return timestamp.
 Currently does not consider weekends, etc."
-  (org-gantt-add-day-if-day timestamp))
+  (and timestamp
+       (org-gantt-change-workdays-if-day timestamp 1 #'time-add)))
 
-(defun org-gantt-add-day-if-day (timestamp)
+(defun org-gantt-change-workdays-if-day (timestamp ndays change-function)
   "Return a timestamp added with one day if timestamp does not have hour information,
 otherwise return timestamp."
   (and timestamp 
@@ -315,7 +357,7 @@ otherwise return timestamp."
                 (org-element-property :minute-start timestamp)
                 (/= 0 (org-element-property :minute-start timestamp)))
            timestamp
-         (org-gantt-add-days timestamp 0))))
+         (org-gantt-change-workdays timestamp ndays change-function))))
 
 (defun org-gantt-subtract-days (timestamp ndays)
   "Return a timestamp ndays previous the given timestamp"
@@ -326,7 +368,7 @@ otherwise return timestamp."
   "Returns the previous workday for the given timestamp, if the timestamp does not contain hour data.
 If timestamp contains hour data, return timestamp.
 Currently does not consider weekends, etc."
-  (org-gantt-subtract-day-if-day timestamp))
+  (org-gantt-change-workdays-if-day timestamp 1 #'time-subtract))
 
 (defun org-gantt-subtract-day-if-day (timestamp)
   "Return a timestamp subtracted by one day if timestamp does not have hour information,
@@ -364,12 +406,8 @@ Recursively apply to subheadlines."
               (plist-put replacement end-prop
                          (or (plist-get replacement end-prop)
                              (if (cdr listitem)
-                                 (progn 
-                                   (message "CURRENT DAY: %s" (plist-get (cadr listitem) start-prop))
-                                   (message "PREVIOS DAY: %s" (org-gantt-get-prev-workday-if-day 
-                                                               (plist-get (cadr listitem) start-prop)))
-                                   (org-gantt-get-prev-workday-if-day 
-                                    (plist-get (cadr listitem) start-prop)))
+                                 (org-gantt-get-prev-workday-if-day 
+                                  (plist-get (cadr listitem) start-prop))
                                parent-end))))
         )
       (when (plist-get replacement :subelements)
@@ -399,7 +437,9 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
                (setq replacement
                      (plist-put replacement end-prop
                                 (org-gantt-time-to-timestamp
-                                 (time-add (org-gantt-timestamp-to-time start) effort)
+                                 (org-gantt-sum-times (org-gantt-timestamp-to-time start)
+                                                      effort org-gantt-default-hours-per-day
+                                                      #'org-gantt-add-workdays)
                                  'forward-computed))))
               ((and effort end)
                (setq replacement
@@ -511,8 +551,8 @@ Returns a pgfgantt string representing that data."
 (defun org-gantt-get-vgrid-style (start-time weekend-style workday-style)
   "Computes a vgrid style from the start date, marking weekends."
   (let* ((dow (string-to-number (format-time-string "%w" start-time)))
-         (weekend-start (and (< dow 3) (1+ dow)))
-         (work-start (and (>= dow 3) (- dow 2)))
+         (weekend-start (and (or (= 0 dow) (> dow 4)) (% (- 8 dow) 7)))
+         (work-start (and (> dow 0) (< dow 5) (- 5 dow)))
          (weekend-middle (and (not weekend-start) 3))
          (work-middle (and (not work-start) 4))
          (weekend-end (and weekend-start (< weekend-start 3) (- 3 weekend-start)))
