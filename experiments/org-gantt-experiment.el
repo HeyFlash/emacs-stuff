@@ -381,6 +381,28 @@ otherwise return timestamp."
            timestamp
          (org-gantt-subtract-days timestamp 0))))
 
+(defun org-gantt-subtract-days (timestamp ndays)
+  "Return a timestamp ndays previous the given timestamp"
+  (org-gantt-time-to-timestamp
+   (time-subtract (org-gantt-timestamp-to-time timestamp) (days-to-time ndays))))
+
+(defun org-gantt-get-prev-workday-if-day (timestamp)
+  "Returns the previous workday for the given timestamp, if the timestamp does not contain hour data.
+If timestamp contains hour data, return timestamp.
+Currently does not consider weekends, etc."
+  (org-gantt-subtract-day-if-day timestamp))
+
+(defun org-gantt-subtract-day-if-day (timestamp)
+  "Return a timestamp subtracted by one day if timestamp does not have hour information,
+otherwise return timestamp."
+  (and timestamp 
+       (if (and (org-element-property :hour-start timestamp)
+                (/= 0 (org-element-property :hour-start timestamp))
+                (org-element-property :minute-start timestamp)
+                (/= 0 (org-element-property :minute-start timestamp)))
+           timestamp
+         (org-gantt-subtract-days timestamp 0))))
+
 (defun org-gantt-plist-get plist prop default
   "Same as plist-get, but returns default, if prop is not one of the properties of plist."
   (or (plist-get plist prop)
