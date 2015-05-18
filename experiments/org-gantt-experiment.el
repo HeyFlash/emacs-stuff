@@ -41,14 +41,28 @@
   (or (plist-get aplist ':deadline)
       (assoc "DEADLINE" aplist)))
 
-(defun org-gantt-identity (x) x)
+(defun org-gantt-hours-per-day ()
+  "Get the hours per day. FIXME: use not only default."
+  org-gantt-default-hours-per-day)
 
-(defun org-gantt-get-planning-timestamp (element timestamp-type)
-  "Get the timestamp from the planning element that belongs to a first-order headline
-of the given element. timestamp-type is either ':scheduled or ':deadline"
-(org-element-map element '(planning headline)
-  (lambda (subelement) (org-element-property timestamp-type subelement))
-  nil t 'headline))
+(defun org-gantt-get-planning-time (element timestamp-type)
+  "Get the time from the planning element that belongs to a first-order headline
+of the given element. timestamp-type is either :scheduled or :deadline.
+If it is :deadline, hours-per-day is added to it."
+  (let* ((timestamp 
+	  (org-element-map
+	   element '(planning headline)
+	   (lambda (subelement) (org-element-property timestamp-type subelement))
+	   nil t 'headline))
+	 (time (org-gantt-timestamp-to-time timestamp))
+	 (dt (decode-time time))
+	 (hours (nth 3 dt))
+	 (minutes (nth 2 dt)))
+    (if (and (equal timestamp-type :deadline)
+	     (= 0 hours)
+	     (= 0 minutes))
+	(time-add time (encode-time 0 0 (org-gantt-hours-per-day) 0 0 0))
+      time)))
 
 (defun org-gantt-get-subheadlines (element)
   (org-element-map element 'headline (lambda (subelement) subelement)
@@ -109,21 +123,21 @@ the subheadlines have no timestamp."
 (defun org-gantt-get-start-time (element)
 ""
 (or
- (org-gantt-get-planning-timestamp element ':scheduled)
+ (org-gantt-get-planning-time element ':scheduled)
  (org-gantt-subheadline-extreme
   (cdr element)
-  #'org-gantt-timestamp-smaller
+  #'time-less-p
   #'org-gantt-get-start-time
   #'org-gantt-get-subheadlines)))
 
 (defun org-gantt-get-end-time (element)
 ""
 (or
- (org-gantt-get-planning-timestamp element ':deadline)
+ (org-gantt-get-planning-time element ':deadline)
  (org-gantt-subheadline-extreme
   (cdr element)
   (lambda (ts1 ts2)
-    (not (org-gantt-timestamp-smaller ts1 ts2)))
+    (not (time-less-p ts1 ts2)))
   #'org-gantt-get-end-time
   #'org-gantt-get-subheadlines)))
 
@@ -164,7 +178,7 @@ the subheadlines have no effort."
            (setq time-sum
                  (org-gantt-sum-times 
                   time-sum subtime org-gantt-default-hours-per-day
-                  #'org-gantt-add-days))))))))
+                  #'time-add))))))))
 
 
 (defun org-gantt-get-effort (element &optional use-subheadlines-effort)
@@ -324,92 +338,115 @@ Optional hours-per-day makes it possible to convert hour estimates into workdays
     (and (/= dow 6)
          (/= dow 0))))
 
-(defun org-gantt-change-workdays (timestamp ndays change-function &optional timestamp-type)
-  "Add or subtract (depending on change-function) ndays workdays to the given timestamp. 
-E.g. if timestamp is on Friday, ndays is one, the result will be monday."
+(defun org-gantt-change-workdays (time ndays change-function)
+  "Add or subtract (depending on change-function) ndays workdays to the given time. 
+E.g. if time is on Friday, ndays is one, the result will be monday.
+FIXME: Does not use holidays."
   (cl-assert (>= ndays 0) "trying to add negative days to timestamp.")
   (let ((oneday (days-to-time 1))
-        (curtime (org-gantt-timestamp-to-time timestamp)))
+        (curtime time))
     (while (/= 0 ndays)
       (setq curtime (funcall change-function curtime oneday))
       (when (org-gantt-is-workday curtime)
         (setq ndays (- ndays 1))))
-    (org-gantt-time-to-timestamp curtime timestamp-type)))
+    (curtime)))
 
-(defun org-gantt-add-days (timestamp ndays)
-  "Return a timestamp ndays advanced from the given timestamp"
-  (org-gantt-time-to-timestamp
-   (time-add (org-gantt-timestamp-to-time timestamp) (days-to-time ndays))))
 
-(defun org-gantt-get-next-workday-if-day (timestamp)
-  "Returns the next workday for the given timestamp, if the timestamp does not contain hour data.
-If timestamp contains hour data, return timestamp.
-Currently does not consider weekends, etc."
-  (and timestamp
-       (org-gantt-change-workdays-if-day timestamp 1 #'time-add)))
+(defun org-gantt-add-worktime (time change-time)
+  "Add change-time to time, taking into account holidays and hours-per-day."
+  (let ((dt (decode-time time))
+	(day-end (encode-time 0 0 (org-gantt-hours-per-day)
+			      (nth dt 3) (nth dt 4) (nth dt 5)))
+	(rest-time (time-subtract day-end time))
+	(one-day (days-to-time 1)))
+    (if (time-less-p change-time rest-time)
+	(time-add time change-time)
+      (let*
+	  ((next-day-d (decode-time (org-gantt-change-workdays time 1 #'time-add)))
+	   (next-day (encode-time 0 0 0 (nth 3 next-day-d 3)
+				  (nth 4 next-day-d) (nth 5 next-day-d)))
+	   (rest-change (time-subtract change-time rest-time))
+	   (dc (decode-time rest-change))
+	   (rest-min (+ (nth dc 1) (* 60 (nth dc 2)))))
+	(while (> rest-min (* 60 hours-per-day))
+	  (setq next-day (org-gantt-change-workdays rest-change 1 #'add-time))
+	  (setq rest-change (time-subtract rest-change (seconds-to-time (* 3600 (hours-per-day)))))
+	  (setq dc (decode-time rest-change))
+	  (setq rest-min (+ (nth dc 1 (* 60 nth dc 2)))))
+	(while (time-less-p one-day rest-change)
+	  (setq next-day (org-gantt-change-workdays rest-change 1 #'add-time))
+	  (setq rest-change (time-subtract rest-change one-day)))
+	time-add next-day rest-change))))
 
-(defun org-gantt-change-workdays-if-day (timestamp ndays change-function)
-  "Return a timestamp added with one day if timestamp does not have hour information,
-otherwise return timestamp."
-  (and timestamp 
-       (if (and (org-element-property :hour-start timestamp)
-                (/= 0 (org-element-property :hour-start timestamp))
-                (org-element-property :minute-start timestamp)
-                (/= 0 (org-element-property :minute-start timestamp)))
-           timestamp
-         (org-gantt-change-workdays timestamp ndays change-function))))
+(defun org-gantt-subtract-worktime (time change-time)
+  "Subtract change-time from time, taking into account holidays and hours-per-day.
+FIXME!!!"
+  (let ((dt (decode-time time))
+	(day-end (encode-time 0 0 (org-gantt-hours-per-day)
+			      (nth dt 3) (nth dt 4) (nth dt 5)))
+	(rest-time (time-subtract day-end time))
+	(one-day (days-to-time 1)))
+    (if (time-less-p change-time rest-time)
+	(time-add time change-time)
+      (let*
+	  ((next-day-d (decode-time (org-gantt-change-workdays time 1 #'time-add)))
+	   (next-day (encode-time 0 0 0 (nth 3 next-day-d 3)
+				  (nth 4 next-day-d) (nth 5 next-day-d)))
+	   (rest-change (time-subtract change-time rest-time))
+	   (dc (decode-time rest-change))
+	   (rest-min (+ (nth dc 1) (* 60 (nth dc 2)))))
+	(while (> rest-min (* 60 hours-per-day))
+	  (setq next-day (org-gantt-change-workdays rest-change 1 #'add-time))
+	  (setq rest-change (time-subtract rest-change (seconds-to-time (* 3600 (hours-per-day)))))
+	  (setq dc (decode-time rest-change))
+	  (setq rest-min (+ (nth dc 1 (* 60 nth dc 2)))))
+	(while (time-less-p one-day rest-change)
+	  (setq next-day (org-gantt-change-workdays rest-change 1 #'add-time))
+	  (setq rest-change (time-subtract rest-change one-day)))
+	time-add next-day rest-change))))
 
-(defun org-gantt-subtract-days (timestamp ndays)
-  "Return a timestamp ndays previous the given timestamp"
-  (org-gantt-time-to-timestamp
-   (time-subtract (org-gantt-timestamp-to-time timestamp) (days-to-time ndays))))
 
-(defun org-gantt-get-prev-workday-if-day (timestamp)
-  "Returns the previous workday for the given timestamp, if the timestamp does not contain hour data.
-If timestamp contains hour data, return timestamp.
-Currently does not consider weekends, etc."
-  (org-gantt-change-workdays-if-day timestamp 1 #'time-subtract))
+;; (defun org-gantt-change-time (time change-time change-function)
+;;   "Add or subtract (depending on change-function) change-time to the given time,
+;; taking into account workdays
+;; E.g. if time is on Friday, change-time is more than one day, the result will be monday.
+;; FIXME: Does not use holidays."
+;;   (cl-assert (>= ndays 0) "trying to add negative days to timestamp.")
+;;   (let ((oneday (days-to-time 1))
+;;         (curtime time)
+;; 	(rest-time change-time))
+;;     (while (/= 0 ndays)
+;;       (setq curtime (funcall change-function curtime oneday))
+;;       (when (org-gantt-is-workday curtime)
+;; 	()
+;;         (setq ndays (- ndays 1))))
+;;     (curtime)))
 
-(defun org-gantt-subtract-day-if-day (timestamp)
-  "Return a timestamp subtracted by one day if timestamp does not have hour information,
-otherwise return timestamp."
-  (and timestamp 
-       (if (and (org-element-property :hour-start timestamp)
-                (/= 0 (org-element-property :hour-start timestamp))
-                (org-element-property :minute-start timestamp)
-                (/= 0 (org-element-property :minute-start timestamp)))
-           timestamp
-         (org-gantt-subtract-days timestamp 0))))
+(defun org-gantt-get-next-time (endtime)
+  "Get the time where the next bar should start."
+  (let* ((dt (decode-time endtime))
+	 (hours (nth 3 dt))
+	 (minutes (nth 2 dt)))
+    (if (and (= (org-gantt-hours-per-day) hours)
+	     (= 0 minutes))
+	(org-gantt-add-worktime endtime (encode-time 0 0 (- 24 (org-gantt-hours-per-day)) 0 0 0))
+      endtime)))
 
-(defun org-gantt-subtract-days (timestamp ndays)
-  "Return a timestamp ndays previous the given timestamp"
-  (org-gantt-time-to-timestamp
-   (time-subtract (org-gantt-timestamp-to-time timestamp) (days-to-time ndays))))
 
-(defun org-gantt-get-prev-workday-if-day (timestamp)
-  "Returns the previous workday for the given timestamp, if the timestamp does not contain hour data.
-If timestamp contains hour data, return timestamp.
-Currently does not consider weekends, etc."
-  (org-gantt-subtract-day-if-day timestamp))
+(defun org-gantt-get-prev-time (starttime)
+  "Get the time where the previous bar should end. 
+FIXME!!!"
+  (let* ((dt (decode-time endtime))
+	 (hours (nth 3 dt))
+	 (minutes (nth 2 dt)))
+    (if (and (= (org-gantt-hours-per-day) hours)
+	     (= 0 minutes))
+	(time-add endtime (encode-time 0 0 (- 24 (org-gantt-hours-per-day)) 0 0 0))
+      endtime)))
 
-(defun org-gantt-subtract-day-if-day (timestamp)
-  "Return a timestamp subtracted by one day if timestamp does not have hour information,
-otherwise return timestamp."
-  (and timestamp 
-       (if (and (org-element-property :hour-start timestamp)
-                (/= 0 (org-element-property :hour-start timestamp))
-                (org-element-property :minute-start timestamp)
-                (/= 0 (org-element-property :minute-start timestamp)))
-           timestamp
-         (org-gantt-subtract-days timestamp 0))))
-
-(defun org-gantt-plist-get plist prop default
-  "Same as plist-get, but returns default, if prop is not one of the properties of plist."
-  (or (plist-get plist prop)
-      default))
 
 (defun org-gantt-propagate-order-timestamps (headline-list &optional is-ordered parent-start parent-end)
-  "Propagate the timestamps of headlines that are ordered according to their superheadline.
+  "Propagate the times of headlines that are ordered according to their superheadline.
 Recursively apply to subheadlines."
   (let ((next-start (or (plist-get (car headline-list) start-prop) parent-start))
         (listitem headline-list)
@@ -423,15 +460,14 @@ Recursively apply to subheadlines."
         (setq replacement
               (plist-put replacement start-prop
                          (or (plist-get replacement start-prop) next-start)))
-        (setq next-start (org-gantt-get-next-workday-if-day (plist-get replacement end-prop)))
+        (setq next-start (org-gantt-get-next-time (plist-get replacement end-prop)))
         (setq replacement
               (plist-put replacement end-prop
                          (or (plist-get replacement end-prop)
                              (if (cdr listitem)
-                                 (org-gantt-get-prev-workday-if-day 
+                                 (org-gantt-get-prev-time 
                                   (plist-get (cadr listitem) start-prop))
-                               parent-end))))
-        )
+                               parent-end)))))
       (when (plist-get replacement :subelements)
         (setq replacement
               (plist-put replacement :subelements
@@ -458,17 +494,11 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
               ((and start effort)
                (setq replacement
                      (plist-put replacement end-prop
-                                (org-gantt-time-to-timestamp
-                                 (org-gantt-sum-times (org-gantt-timestamp-to-time start)
-                                                      effort org-gantt-default-hours-per-day
-                                                      #'org-gantt-add-workdays)
-                                 'forward-computed))))
+				(org-gantt-add-worktime start effort))))
               ((and effort end)
                (setq replacement
                      (plist-put replacement start-prop
-                                (org-gantt-time-to-timestamp
-                                 (time-subtract (org-gantt-timestamp-to-time end) effort)
-                                 'backward-computed)))))
+				(org-gantt-subtract-worktime start effort)))))
         (when (plist-get replacement :subelements)
           (setq replacement
                 (plist-put replacement :subelements
@@ -496,7 +526,7 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
           (org-gantt-first-subheadline-start headline)
         (org-gantt-subheadline-extreme
          headline
-         #'org-gantt-timestamp-smaller
+         #'time-less-p
          (lambda (hl) (org-gantt-get-subheadline-start hl ordered))
          (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))
       ))
@@ -509,8 +539,8 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
           (org-gantt-last-subheadline-end headline)
         (org-gantt-subheadline-extreme
          headline
-         (lambda (ts1 ts2)
-           (not (org-gantt-timestamp-smaller ts1  ts2)))
+         (lambda (t1 t2)
+           (not (time-less-p t1 t2)))
          (lambda (hl) (org-gantt-get-subheadline-end hl ordered))
          (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))
       ))
@@ -543,11 +573,11 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
      "{" (plist-get gi ':name) "}"
      "{"
      (when (plist-get gi start-prop)
-       (org-gantt-timestamp-to-string (plist-get gi start-prop)))
+       (format-time-string "%Y-%m-%d" (plist-get gi start-prop)))
      "}"
      "{"
      (when (plist-get gi end-prop)
-       (org-gantt-timestamp-to-string (plist-get gi end-prop)))
+       (format-time-string "%Y-%m-%d" (plist-get gi end-prop)))
      "}"
      "\\\\\n"
      (when subelements
@@ -637,19 +667,21 @@ Returns a pgfgantt string representing that data."
           "\\begin{ganttchart}[time slot format=isodate, "
           "vgrid="
           (org-gantt-get-vgrid-style 
-           (org-gantt-timestamp-to-time 
-            (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'org-gantt-timestamp-smaller))
+           (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'time-less-p)
            weekend-style workday-style)
           (when additional-parameters
             (concat ", " additional-parameters))
           "]{"
           (or start-date
-              (org-gantt-timestamp-to-string
-               (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'org-gantt-timestamp-smaller)))
+	      (format-time-string
+	       "%Y-%m-%d" 
+	       (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'time-less-p)))
           "}{"
           (or end-date
-              (org-gantt-timestamp-to-string
-               (org-gantt-get-extreme-date parsed-data #'org-gantt-get-end-time #'org-gantt-timestamp-larger)))
+              (format-time-string
+	       "%Y-%m-%d"
+               (org-gantt-get-extreme-date parsed-data #'org-gantt-get-end-time
+					   (lambda (t1 t2) (not (time-less-p t1 t2))))))
           "}\n"
           "\\gantttitlecalendar{"
           (if titlecalendar
