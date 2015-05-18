@@ -189,11 +189,17 @@ A gantt-info is a plist containing :name start-prop end-prop effort-prop :subele
      (number-to-string (plist-get ts ':month-start))
      "-"
      (number-to-string 
-      (if (and (equal (plist-get ts :type) 'computed)
+      
+      (if (and (plist-get ts :hour-start)
                (= (plist-get ts :hour-start) 0)
+               (plist-get ts :minute-start)
                (= (plist-get ts :minute-start) 0))
-          (-(plist-get ts :day-start) 0)
-        (plist-get ts ':day-start))))))
+          (if (equal (plist-get ts :type) 'forward-computed)
+              (- (plist-get ts :day-start) 1)
+            (if (equal (plist-get ts :type) 'backward-computed)
+                (+ (plist-get ts :day-start) 1)
+              (plist-get ts :day-start)))
+        (plist-get ts :day-start))))))
 
 (defun org-gantt-timestamp-to-pgf-end (timestamp)
   "Converts a timestamp to a pfg end time string. Specifically uses the day before,
@@ -227,12 +233,12 @@ If optional use-end is non-nil use the ...-end values of the timestamp."
                       (org-element-property :month-start timestamp)
                       (org-element-property :year-start timestamp)))))
 
-(defun org-gantt-time-to-timestamp (time)
+(defun org-gantt-time-to-timestamp (time &optional type)
   "Converts an emacs time to an org-mode timestamp."
   (let ((dt (decode-time time)))
     (and time
          (list 'timestamp
-               (list :type 'computed :raw-value (format-time-string "<%Y-%m-%d %a>" time)
+               (list :type (or type 'computed) :raw-value (format-time-string "<%Y-%m-%d %a>" time)
                      :year-start (nth 5 dt) :month-start (nth 4 dt) :day-start (nth 3 dt)
                      :hour-start (nth 2 dt) :minute-start (nth 1 dt)
                      :year-end (nth 5 dt) :month-end (nth 4 dt) :day-end (nth 3 dt)
@@ -304,9 +310,34 @@ Currently does not consider weekends, etc."
   "Return a timestamp added with one day if timestamp does not have hour information,
 otherwise return timestamp."
   (and timestamp 
-       (if (org-element-property :hour-start timestamp)
+       (if (and (org-element-property :hour-start timestamp)
+                (/= 0 (org-element-property :hour-start timestamp))
+                (org-element-property :minute-start timestamp)
+                (/= 0 (org-element-property :minute-start timestamp)))
            timestamp
          (org-gantt-add-days timestamp 0))))
+
+(defun org-gantt-subtract-days (timestamp ndays)
+  "Return a timestamp ndays previous the given timestamp"
+  (org-gantt-time-to-timestamp
+   (time-subtract (org-gantt-timestamp-to-time timestamp) (days-to-time ndays))))
+
+(defun org-gantt-get-prev-workday-if-day (timestamp)
+  "Returns the previous workday for the given timestamp, if the timestamp does not contain hour data.
+If timestamp contains hour data, return timestamp.
+Currently does not consider weekends, etc."
+  (org-gantt-subtract-day-if-day timestamp))
+
+(defun org-gantt-subtract-day-if-day (timestamp)
+  "Return a timestamp subtracted by one day if timestamp does not have hour information,
+otherwise return timestamp."
+  (and timestamp 
+       (if (and (org-element-property :hour-start timestamp)
+                (/= 0 (org-element-property :hour-start timestamp))
+                (org-element-property :minute-start timestamp)
+                (/= 0 (org-element-property :minute-start timestamp)))
+           timestamp
+         (org-gantt-subtract-days timestamp 0))))
 
 (defun org-gantt-plist-get plist prop default
   "Same as plist-get, but returns default, if prop is not one of the properties of plist."
@@ -333,7 +364,12 @@ Recursively apply to subheadlines."
               (plist-put replacement end-prop
                          (or (plist-get replacement end-prop)
                              (if (cdr listitem)
-                                 (plist-get (cadr listitem) start-prop)
+                                 (progn 
+                                   (message "CURRENT DAY: %s" (plist-get (cadr listitem) start-prop))
+                                   (message "PREVIOS DAY: %s" (org-gantt-get-prev-workday-if-day 
+                                                               (plist-get (cadr listitem) start-prop)))
+                                   (org-gantt-get-prev-workday-if-day 
+                                    (plist-get (cadr listitem) start-prop)))
                                parent-end))))
         )
       (when (plist-get replacement :subelements)
@@ -363,12 +399,14 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
                (setq replacement
                      (plist-put replacement end-prop
                                 (org-gantt-time-to-timestamp
-                                 (time-add (org-gantt-timestamp-to-time start) effort)))))
+                                 (time-add (org-gantt-timestamp-to-time start) effort)
+                                 'forward-computed))))
               ((and effort end)
                (setq replacement
                      (plist-put replacement start-prop
                                 (org-gantt-time-to-timestamp
-                                 (time-subtract (org-gantt-timestamp-to-time end) effort))))))
+                                 (time-subtract (org-gantt-timestamp-to-time end) effort)
+                                 'backward-computed)))))
         (when (plist-get replacement :subelements)
           (setq replacement
                 (plist-put replacement :subelements
@@ -531,6 +569,7 @@ Returns a pgfgantt string representing that data."
                 (org-gantt-propagate-ds-up
                  (org-gantt-propagate-order-timestamps
                   (org-gantt-calculate-ds-from-effort org-gantt-info-list)))))
+;        (message "%s" org-gantt-info-list)
         (insert
          (concat
           "\\begin{ganttchart}[time slot format=isodate, "
