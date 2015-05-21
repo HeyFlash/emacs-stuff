@@ -1,3 +1,4 @@
+;;; org-gantt-experiment.el --- This is org-gantt, which allows to create gantt charts from deadlines, schedules, efforts and clock values.
 ;;| start | end | effort | dependency |
 ;;|       |     |        |            |
 ;;
@@ -10,48 +11,60 @@
 ;;| start end effort dependency |
 ;;| ERROR                       |
 
+
+;;; Commentary:
+;; 
+
+;;; Code:
+
 (defgroup org-gantt nil "Customization of org-gantt.")
 
 (defcustom org-gantt-default-hours-per-day 8
-  "The default hours in a workday. Use :hours-per-day to overwrite this value."
+  "The default hours in a workday.  Use :hours-per-day to overwrite this value."
   :type '(integer)
   :group 'org-gantt)
 
 (defcustom org-gantt-default-weekend-style "{black}"
-  "The default style for the weekend lines. Use :weekend-style to overwrite this value."
+  "The default style for the weekend lines.  Use :weekend-style to overwrite this value."
   :type '(string)
   :group 'org-gantt)
 
 (defcustom org-gantt-default-workday-style "{dashed}"
-  "The default style for the workday lines. Use :workday-style to overwrite this value."
+  "The default style for the workday lines.  Use :workday-style to overwrite this value."
   :type '(string)
   :group 'org-gantt)
 
 
 (defconst org-gantt-start-prop :startdate
-  "What is used as the start property in the constructed property list")
+  "What is used as the start property in the constructed property list.")
 
 (defconst org-gantt-end-prop :enddate
-  "What is used as the end property in the constructed property list")
+  "What is used as the end property in the constructed property list.")
 
 (defconst org-gantt-effort-prop :effort
-  "What is used as the effort property in the constructed property list")
+  "What is used as the effort property in the constructed property list.")
 
 (defconst org-gantt-clocksum-prop :clocksum
-  "What is used as the effort property in the constructed property list")
+  "What is used as the effort property in the constructed property list.")
+
+(defconst org-gantt-clocksum-prop :progress
+  "What is used as the progress property in the constructed property list.")
 
 (defun org-gantt-has-effort (aplist)
-  "returns non-nil if an alist or plist contains effort"
+  "Return non-nil if an alist or plist contains effort.
+Argument APLIST an alist or plist."
 (or (plist-get aplist ':effort)
     (assoc "effort" aplist)))
 
 (defun org-gantt-has-startdate (aplist)
-  "returns non-nil if an alist or plist contains a startdate"
+  "Returns non-nil if an alist or plist contains a startdate.
+Argument APLIST an alist or plist."
 (or (plist-get aplist ':scheduled)
     (assoc "SCHEDULED" aplist)))
 
 (defun org-gantt-has-enddate (aplist)
-  "returns non-nil if an alist or plist contains an enddate"
+  "Return non-nil if an alist or plist contains an enddate.
+Argument APLIST an alist or plist."
   (or (plist-get aplist ':deadline)
       (assoc "DEADLINE" aplist)))
 
@@ -67,10 +80,10 @@
   (seconds-to-time (* 3600 (org-gantt-hours-per-day))))
 
 (defun org-gantt-get-planning-time (element timestamp-type)
-  "Get the time from the planning element that belongs to a first-order headline
-of the given element. timestamp-type is either :scheduled or :deadline.
+  "Get the time belonging to a first-order headline of the given ELEMENT.
+TIMESTAMP-TYPE is either :scheduled or :deadline.
 If it is :deadline, hours-per-day is added to it."
-  (let* ((timestamp 
+  (let* ((timestamp
 	  (org-element-map
 	   element '(planning headline)
 	   (lambda (subelement) (org-element-property timestamp-type subelement))
@@ -170,7 +183,14 @@ the subheadlines have no timestamp."
 
 (defun org-gantt-sum-times (e1 e2 day-adder)
   "Sums e1 and e2, taking into account hours-per-workday."
-  (let* ((e1time (decode-time e1))
+  (let* ((e1s (round (time-to-seconds e1)))
+         (e2s (round (time-to-seconds e2)))
+         (e1h (/ 3600 e1s))
+         (e2h (/ 3600 e2s))
+         (e1d (/ (org-gantt-hours-per-day) e1h))
+         (e2d (/ (org-gantt-hours-per-day) e2h))
+         (ad (+ e1d e2d))
+         (e1time (decode-time e1))
          (e2time (decode-time e2))
          (e1min (nth 1 e1time))
          (e2min (nth 1 e2time))
@@ -202,9 +222,7 @@ the subheadlines have no effort."
      (dolist (sh subheadlines (if (= 0 (apply '+ time-sum)) nil time-sum))
        (let ((subtime (funcall effort-getter sh element-org-gantt-effort-prop)))
          (when subtime
-           (setq time-sum
-                 (org-gantt-sum-times 
-                  time-sum subtime #'time-add))))))))
+           (setq time-sum (time-add time-sum subtime))))))))
 
 
 (defun org-gantt-get-effort (element element-org-gantt-effort-prop &optional use-subheadlines-effort)
@@ -223,20 +241,12 @@ A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop
 	':ordered (org-element-property :ORDERED element)
         org-gantt-start-prop (org-gantt-get-start-time element)
         org-gantt-end-prop (org-gantt-get-end-time element)
-        org-gantt-effort-prop (org-gantt-get-effort element :EFFORT)
+        org-gantt-effort-prop (org-gantt-get-effort 
+                               element :EFFORT
+                               ;(make-symbol (concat ":" (upcase org-effort-property)))
+                               )
         org-gantt-clocksum-prop (org-gantt-get-effort element :CLOCKSUM)
         ':subelements (org-gantt-crawl-headlines (cdr element))))
-
-;; (defun org-gantt-subpropagate-start-date (element start-date)
-;;   "Propagates end date from one subelement to start date of next subelement,
-;; if element is ordered."
-;;   (let ((subelements (plist-get element :subelements))
-;; 	(ordered (plist-get element :ordered)))
-;;     (if ordered
-;; 	(dolist (se subelements)
-;; 	  (let ((end (plist-get se org-gantt-end-prop)))
-;; 	    (if end
-;; 		))))))
 
 (defun org-gantt-crawl-headlines (data)
   ""
@@ -252,7 +262,7 @@ A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop
      "-"
      (number-to-string (plist-get ts ':month-start))
      "-"
-     (number-to-string 
+     (number-to-string
       
       (if (and (plist-get ts :hour-start)
                (= (plist-get ts :hour-start) 0)
@@ -325,7 +335,7 @@ If optional use-end is non-nil use the ...-end values of the timestamp."
                       (* 3600 (org-gantt-string-to-number hours-string))))
          (calc-days (/ ex-hours (org-gantt-hours-per-day)))
          (rest-hours (% ex-hours (org-gantt-hours-per-day)))
-         (time 
+         (time
           (seconds-to-time
            (+ (org-gantt-string-to-number seconds-string)
               (* 60 (org-gantt-string-to-number minutes-string))
@@ -364,7 +374,7 @@ Optional hours-per-day makes it possible to convert hour estimates into workdays
          (/= dow 0))))
 
 (defun org-gantt-change-workdays (time ndays change-function)
-  "Add or subtract (depending on change-function) ndays workdays to the given time. 
+  "Add or subtract (depending on change-function) ndays workdays to the given time.
 E.g. if time is on Friday, ndays is one, the result will be monday.
 FIXME: Does not use holidays."
   (cl-assert (>= ndays 0) "trying to add negative days to timestamp.")
@@ -455,7 +465,7 @@ FIXME: Does not use holidays."
 
 
 (defun org-gantt-get-prev-time (starttime)
-  "Get the time where the previous bar should end. 
+  "Get the time where the previous bar should end.
 FIXME!!!"
   (let* ((dt (decode-time starttime))
 	 (hours (nth 3 dt))
@@ -486,7 +496,7 @@ Recursively apply to subheadlines."
               (plist-put replacement org-gantt-end-prop
                          (or (plist-get replacement org-gantt-end-prop)
                              (if (cdr listitem)
-                                 (org-gantt-get-prev-time 
+                                 (org-gantt-get-prev-time
                                   (plist-get (cadr listitem) org-gantt-start-prop))
                                parent-end)))))
       (when (plist-get replacement :subelements)
@@ -515,7 +525,7 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
               ((and start effort)
                (setq replacement
                      (plist-put replacement org-gantt-end-prop
-				(org-gantt-change-worktime 
+				(org-gantt-change-worktime
                                  start effort
                                  #'time-add
                                  #'org-gantt-day-start
@@ -523,7 +533,7 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
               ((and effort end)
                (setq replacement
                      (plist-put replacement org-gantt-start-prop
-				(org-gantt-change-worktime 
+				(org-gantt-change-worktime
                                  end effort
                                  #'time-subtract
                                  #'org-gantt-day-end
@@ -557,9 +567,7 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
          headline
          #'org-gantt-time-less-p
          (lambda (hl) (org-gantt-get-subheadline-start hl ordered))
-         (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))
-      ))
-
+         (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))))
 
 (defun org-gantt-get-subheadline-end (headline ordered)
   ""
@@ -571,8 +579,19 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
          (lambda (t1 t2)
            (not (org-gantt-time-less-p t1 t2)))
          (lambda (hl) (org-gantt-get-subheadline-end hl ordered))
-         (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))
-      ))
+         (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))))
+
+
+(defun org-gantt-get-subheadline-effort-sum (headline)
+  ""
+  (or (plist-get headline org-gantt-effort-prop)
+      (let ((subelements (plist-get headline :subelements))
+            (effort-sum (seconds-to-time 0)))
+;        (org-gantt-propagate-effort-up subelements)
+        (dolist (ch subelements effort-sum)
+          (setq effort-sum 
+                (time-add effort-sum  
+                          (org-gantt-get-subheadline-effort-sum ch)))))))
 
 (defun org-gantt-propagate-ds-up (headline-list &optional ordered)
   "Propagates start and end time from subelements."
@@ -590,13 +609,26 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
                          (org-gantt-get-subheadline-end replacement cur-ordered)))
         (setq newlist (append newlist (list replacement)))))))
 
+(defun org-gantt-propagate-effort-up (headline-list)
+  "Propagates summed efforts from subelements."
+  (let ((newlist nil))
+    (dolist (headline headline-list newlist)
+      (let ((replacement headline)
+            (effort (plist-get headline org-gantt-effort-prop)))
+        (unless effort
+          (setq replacement
+                (plist-put replacement org-gantt-effort-prop
+                           (org-gantt-get-subheadline-effort-sum replacement))))
+        (setq newlist (append newlist (list replacement)))))))
+
+
 (defun org-gantt-downcast-endtime (endtime)
   (let* ((dt (decode-time endtime))
          (hours (nth 2 dt))
          (minutes (nth 1 dt)))
     (if (and (= 0 hours)
              (= 0 minutes))
-        (time-add (org-gantt-change-workdays endtime 1 #'time-subtract) 
+        (time-add (org-gantt-change-workdays endtime 1 #'time-subtract)
                   (org-gantt-hours-per-day-time))
       endtime)))
 
@@ -606,7 +638,7 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
          (minutes (nth 1 dt)))
     (if (and (= 0 minutes)
              (= (org-gantt-hours-per-day) hours))
-        (time-subtract (org-gantt-change-workdays starttime 1 #'time-add) 
+        (time-subtract (org-gantt-change-workdays starttime 1 #'time-add)
                        (org-gantt-hours-per-day-time))
       starttime)))
 
@@ -622,7 +654,9 @@ is in the hour-minute part of time."
 (defun org-gantt-get-completion-percent (effort clocksum)
   "Returns the percentage of completion of effort as measured by clocksum."
   (if (and clocksum effort)
-      (round (* 100  (/ (time-to-seconds clocksum) (time-to-seconds effort))))
+      (let ((css (time-to-seconds clocksum))
+            (es (time-to-seconds effort)))
+        (if (> es 0) (round (* 100  (/ css es)))  0))
     0))
 
 (defun org-gantt-info-to-pgfgantt (gi &optional show-progress prefix ordered linked)
@@ -643,34 +677,37 @@ is in the hour-minute part of time."
      (if subelements "group left shift=" "bar left shift=")
      (number-to-string (org-gantt-get-day-ratio up-start))
      (if subelements ", group right shift=" ", bar right shift=")
-     (number-to-string (if (>  (org-gantt-get-day-ratio down-end) 0)  
+     (number-to-string (if (>  (org-gantt-get-day-ratio down-end) 0)
                            (* -1.0 (- 1.0 (org-gantt-get-day-ratio down-end)))
                          0))
      (when (or (equal show-progress t)
                (and (equal show-progress 'if-clocksum)
-                    clocksum)) 
+                    clocksum))
        (concat
         ", progress="
         (number-to-string (org-gantt-get-completion-percent effort clocksum))))
      "]"
      "{" (plist-get gi :name) "}"
      "{"
-     (when (plist-get gi org-gantt-start-prop)
+     (when up-start
        (format-time-string "%Y-%m-%d" up-start))
      "}"
      "{"
-     (when (plist-get gi org-gantt-end-prop)
+     (when down-end
        (format-time-string "%Y-%m-%d" down-end))
      "}"
      "\\\\%"
-     (when (plist-get gi org-gantt-start-prop)
-       (format-time-string "%Y-%m-%d,%H:%M" (plist-get gi org-gantt-start-prop)))
+     (when start
+       (format-time-string "%Y-%m-%d,%H:%M" start))
      " -- "
-     (when (plist-get gi org-gantt-effort-prop)
-       (format-time-string "%H:%M" (plist-get gi org-gantt-effort-prop)))
+     (when effort
+       (concat 
+        (number-to-string (floor (time-to-number-of-days effort)))
+        "d "
+        (format-time-string "%H:%M" effort)))
      " -- "
-     (when (plist-get gi org-gantt-end-prop)
-       (format-time-string "%Y-%m-%d,%H:%M" (plist-get gi org-gantt-end-prop)))
+     (when end
+       (format-time-string "%Y-%m-%d,%H:%M" end))
      "\n"
      (when subelements
        (org-gantt-info-list-to-pgfgantt
@@ -684,13 +721,13 @@ is in the hour-minute part of time."
 Returns a pgfgantt string representing that data."
   (concat
    (org-gantt-info-to-pgfgantt (car data) show-progress prefix ordered nil)
-   (mapconcat (lambda (datum) 
-                (org-gantt-info-to-pgfgantt datum show-progress prefix ordered ordered)) 
-              (cdr data) 
+   (mapconcat (lambda (datum)
+                (org-gantt-info-to-pgfgantt datum show-progress prefix ordered ordered))
+              (cdr data)
               "")))
 
 (defun org-gantt-days-to-vgrid-style (weekend workday weekend-style workday-style)
-  (or 
+  (or
    (when weekend
      (concat "*" (number-to-string weekend) weekend-style))
    (when workday
@@ -705,7 +742,7 @@ Returns a pgfgantt string representing that data."
          (work-middle (and (not work-start) 4))
          (weekend-end (and weekend-start (< weekend-start 3) (- 3 weekend-start)))
          (work-end (and work-start (< work-start 4) (- 4 work-start))))
-    (concat 
+    (concat
      "{"
      (org-gantt-days-to-vgrid-style weekend-start work-start weekend-style workday-style)
      ","
@@ -734,6 +771,7 @@ Returns a pgfgantt string representing that data."
         (if view-file
             (get-file-buffer view-file)
           (current-buffer))
+      (org-clock-sum)
       (setq org-gantt-hours-per-day-gv (or  (plist-get params :hours-per-day) org-gantt-default-hours-per-day))
       (let* ((titlecalendar (plist-get params :titlecalendar))
              (start-date (plist-get params org-gantt-start-prop))
@@ -756,32 +794,33 @@ Returns a pgfgantt string representing that data."
           (error "Could not find element with :ID: %s" id))
         (while (not (equal org-gantt-info-list org-gantt-check-info-list))
           (setq org-gantt-check-info-list (copy-tree org-gantt-info-list))
-          (setq org-gantt-info-list 
+          (setq org-gantt-info-list
                 (org-gantt-propagate-ds-up
                  (org-gantt-propagate-order-timestamps
                   (org-gantt-calculate-ds-from-effort org-gantt-info-list)))))
 ;        (message "%s" org-gantt-info-list)
+        (setq org-gantt-info-list (org-gantt-propagate-effort-up org-gantt-info-list))
         (insert
          (concat
           "\\begin{ganttchart}[time slot format=isodate, "
           "vgrid="
-          (org-gantt-get-vgrid-style 
+          (org-gantt-get-vgrid-style
            (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'org-gantt-time-less-p)
            weekend-style workday-style)
           (when today-value
-            (concat 
+            (concat
              ", today="
-             (format-time-string 
+             (format-time-string
               "%Y-%m-%d"
-              (if (equal t today-value) 
-                  (current-time) 
+              (if (equal t today-value)
+                  (current-time)
                 (org-gantt-timestamp-to-time (org-parse-time-string today-value))))))
           (when additional-parameters
             (concat ", " additional-parameters))
           "]{"
           (or start-date
 	      (format-time-string
-	       "%Y-%m-%d" 
+	       "%Y-%m-%d"
 	       (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'org-gantt-time-less-p)))
           "}{"
           (or end-date
@@ -797,3 +836,7 @@ Returns a pgfgantt string representing that data."
           "}\\\\\n"
           (org-gantt-info-list-to-pgfgantt org-gantt-info-list show-progress)
           "\\end{ganttchart}"))))))
+
+(provide 'org-gantt-experiment)
+
+;;; org-gantt-experiment.el ends here
