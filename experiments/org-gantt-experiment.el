@@ -47,7 +47,7 @@
 (defconst org-gantt-clocksum-prop :clocksum
   "What is used as the effort property in the constructed property list.")
 
-(defconst org-gantt-clocksum-prop :progress
+(defconst org-gantt-progress-prop :progress
   "What is used as the progress property in the constructed property list.")
 
 (defun org-gantt-has-effort (aplist)
@@ -593,6 +593,28 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
                 (time-add effort-sum  
                           (org-gantt-get-subheadline-effort-sum ch)))))))
 
+(defun org-gantt-get-subheadline-progress-summation (headline calc-progress)
+  ""
+  (let ((subelements (plist-get headline :subelements))
+        (progress (plist-get headline org-gantt-progress-prop))
+        (progress-sum nil)
+        (count 0))
+    (or (and (equal calc-progress 'use-larger-100) 
+             progress)
+        (and progress
+             (min 100 progress))
+                                        ;        (org-gantt-propagate-summation-up subelements)
+        (dolist (ch subelements (and progress-sum count (/ progress-sum count)))
+          (let ((subsum (org-gantt-get-subheadline-progress-summation ch calc-progress)))
+            (setq count (1+ count))
+            (setq progress-sum 
+                  (cond 
+                   ((and progress-sum subsum)
+                    (+ progress-sum subsum))
+                   (progress-sum progress-sum)
+                   (subsum subsum)
+                   (t nil))))))))
+
 (defun org-gantt-propagate-ds-up (headline-list &optional ordered)
   "Propagates start and end time from subelements."
   (let ((newlist nil))
@@ -609,18 +631,35 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
                          (org-gantt-get-subheadline-end replacement cur-ordered)))
         (setq newlist (append newlist (list replacement)))))))
 
-(defun org-gantt-propagate-effort-up (headline-list)
+(defun org-gantt-propagate-summation-up (headline-list property subsum-getter)
   "Propagates summed efforts from subelements."
   (let ((newlist nil))
     (dolist (headline headline-list newlist)
       (let ((replacement headline)
-            (effort (plist-get headline org-gantt-effort-prop)))
+            (effort (plist-get headline property)))
         (unless effort
           (setq replacement
-                (plist-put replacement org-gantt-effort-prop
-                           (org-gantt-get-subheadline-effort-sum replacement))))
+                (plist-put replacement property
+                           (funcall subsum-getter replacement))))
         (setq newlist (append newlist (list replacement)))))))
 
+(defun org-gantt-compute-progress (headline-list)
+  "Computes the progress (if possible) for the headlines in headlines-list.
+Is recursively applied to subelements."
+  (let ((newlist nil))
+    (dolist (headline headline-list newlist)
+      (let ((replacement headline)
+            (effort (plist-get headline org-gantt-effort-prop))
+            (clocksum (plist-get headline org-gantt-clocksum-prop))
+            (subelements (plist-get headline :subelements)))
+        (when (and effort clocksum)
+          (setq replacement
+                (plist-put replacement org-gantt-progress-prop
+                           (org-gantt-get-completion-percent effort clocksum))))
+        (setq replacement 
+              (plist-put replacement :subelements
+                         (org-gantt-compute-progress subelements)))
+        (setq newlist (append newlist (list replacement)))))))
 
 (defun org-gantt-downcast-endtime (endtime)
   (let* ((dt (decode-time endtime))
@@ -683,6 +722,7 @@ is in the hour-minute part of time."
      (when (or (equal show-progress t)
                (and (equal show-progress 'if-clocksum)
                     clocksum))
+       ;FIXME : use progress-prop here
        (concat
         ", progress="
         (number-to-string (org-gantt-get-completion-percent effort clocksum))))
@@ -781,6 +821,7 @@ Returns a pgfgantt string representing that data."
              (workday-style (or (plist-get params :workday-style) org-gantt-default-workday-style))
              (today-value (plist-get params :today))
              (show-progress (plist-get params :progress))
+             (calc-progress (plist-get params :calc-progress))
              (parsed-buffer (org-element-parse-buffer))
              (parsed-data
               (cond ((or (not id) (eq id 'global) view-file) parsed-buffer)
@@ -799,7 +840,15 @@ Returns a pgfgantt string representing that data."
                  (org-gantt-propagate-order-timestamps
                   (org-gantt-calculate-ds-from-effort org-gantt-info-list)))))
 ;        (message "%s" org-gantt-info-list)
-        (setq org-gantt-info-list (org-gantt-propagate-effort-up org-gantt-info-list))
+        (setq org-gantt-info-list (org-gantt-propagate-summation-up 
+                                   org-gantt-info-list
+                                   org-gantt-effort-prop
+                                   #'org-gantt-get-subheadline-effort-sum))
+        (setq org-gantt-info-list (org-gantt-compute-progress org-gantt-info-list))
+        (setq org-gantt-info-list (org-gantt-propagate-summation-up
+                                   org-gantt-info-list
+                                   org-gantt-progress-prop
+                                   (lambda (hl) (org-gantt-get-subheadline-progress-summation hl calc-progress))))
         (insert
          (concat
           "\\begin{ganttchart}[time slot format=isodate, "
