@@ -245,7 +245,8 @@ A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop
                                element :EFFORT
                                ;(make-symbol (concat ":" (upcase org-effort-property)))
                                )
-        org-gantt-clocksum-prop (org-gantt-get-effort element :CLOCKSUM)
+        org-gantt-clocksum-prop (org-gantt-effort-to-time (org-element-property :CLOCKSUM element) 24) ;clocksum is computed automatically with 24 hours per day, therefore we use 24.
+;        (org-gantt-get-effort element :CLOCKSUM)
         ':subelements (org-gantt-crawl-headlines (cdr element))))
 
 (defun org-gantt-crawl-headlines (data)
@@ -328,7 +329,7 @@ If optional use-end is non-nil use the ...-end values of the timestamp."
 
 (defun org-gantt-strings-to-time
   (seconds-string minutes-string &optional hours-string
-   days-string weeks-string months-string years-string)
+   days-string weeks-string months-string years-string hours-per-day)
   "Convert the given strings to time, taking into account hours-per-day."
   (let* ((ex-hours (+ (org-gantt-string-to-number seconds-string)
                       (* 60 (org-gantt-string-to-number minutes-string))
@@ -340,14 +341,14 @@ If optional use-end is non-nil use the ...-end values of the timestamp."
            (+ (org-gantt-string-to-number seconds-string)
               (* 60 (org-gantt-string-to-number minutes-string))
               (* 3600 (org-gantt-string-to-number hours-string))
-              (* 3600 (org-gantt-hours-per-day) (org-gantt-string-to-number days-string))
-              (* 3600 (org-gantt-hours-per-day) 30 (org-gantt-string-to-number months-string))
-              (* 3600 (org-gantt-hours-per-day) 30 12 (org-gantt-string-to-number years-string))))))
+              (* 3600 (or hours-per-day (org-gantt-hours-per-day)) (org-gantt-string-to-number days-string))
+              (* 3600 (or hours-per-day (org-gantt-hours-per-day)) 30 (org-gantt-string-to-number months-string))
+              (* 3600 (or hours-per-day (org-gantt-hours-per-day)) 30 12 (org-gantt-string-to-number years-string))))))
     (if (= 0 (apply '+ time))
         nil
       time)))
 
-(defun org-gantt-effort-to-time (effort)
+(defun org-gantt-effort-to-time (effort &optional hours-per-day)
   "Parses an effort timestring and returns it as emacs time representing a time difference.
 Optional hours-per-day makes it possible to convert hour estimates into workdays."
   (and effort
@@ -365,7 +366,8 @@ Optional hours-per-day makes it possible to convert hour estimates into workdays
          (org-gantt-strings-to-time "0"
                                     minutes-string hours-string
                                     days-string weeks-string
-                                    months-string years-string))))
+                                    months-string years-string
+                                    hours-per-day))))
 
 (defun org-gantt-is-workday (time)
   "Returns non-nil, iff time is a workday. Currently does not consider holidays."
@@ -434,7 +436,7 @@ FIXME: Does not use holidays."
   (let* ((day-end (funcall day-end-getter time))
          (rest-time (org-gantt-time-difference day-end time))
          (one-day (days-to-time 1)))
-    (message "Change Time: %s" (format-time-string "%Y-%m-%d:%T" change-time))
+;    (message "Change Time: %s" (format-time-string "%Y-%m-%d:%T" change-time))
     (if (time-less-p change-time rest-time)
 	(funcall time-changer time change-time)
       (let*
@@ -458,21 +460,23 @@ FIXME: Does not use holidays."
     (if (and (= (org-gantt-hours-per-day) hours)
 	     (= 0 minutes))
 	(org-gantt-change-worktime
-         endtime (encode-time 0 0 (- 24 (org-gantt-hours-per-day)) 0 0 0)
+         endtime (encode-time (* 3600 (- 24 (org-gantt-hours-per-day))))
          #'time-add
          #'org-gantt-day-start #'org-gantt-day-end)
       endtime)))
 
 
 (defun org-gantt-get-prev-time (starttime)
-  "Get the time where the previous bar should end.
-FIXME!!!"
+  "Get the time where the previous bar should end."
   (let* ((dt (decode-time starttime))
 	 (hours (nth 3 dt))
 	 (minutes (nth 2 dt)))
     (if (and (= (org-gantt-hours-per-day) hours)
 	     (= 0 minutes))
-	(time-add starttime (encode-time 0 0 (- 24 (org-gantt-hours-per-day)) 0 0 0))
+        (org-gantt-change-worktime
+         starttime (seconds-to-time (* 3600 (- 24 (org-gantt-hours-per-day))))
+         #'time-subtract
+         #'org-gantt-day-end #'org-gantt-day-start)
       starttime)))
 
 
@@ -593,27 +597,36 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
                 (time-add effort-sum  
                           (org-gantt-get-subheadline-effort-sum ch)))))))
 
-(defun org-gantt-get-subheadline-progress-summation (headline calc-progress)
+(defun org-gantt-get-subheadline-progress-summation (headline calc-progress &optional prioritize-subsums)
   ""
   (let ((subelements (plist-get headline :subelements))
         (progress (plist-get headline org-gantt-progress-prop))
         (progress-sum nil)
         (count 0))
-    (or (and (equal calc-progress 'use-larger-100) 
+    (message "Subelements: %s" subelements)
+    (or (and (not prioritize-subsums)
+             (equal calc-progress 'use-larger-100) 
              progress)
-        (and progress
+        (and (not prioritize-subsums)
+             progress
+             (message "USING MINIMUM of (100, %s)" progress)
              (min 100 progress))
                                         ;        (org-gantt-propagate-summation-up subelements)
         (dolist (ch subelements (and progress-sum count (/ progress-sum count)))
-          (let ((subsum (org-gantt-get-subheadline-progress-summation ch calc-progress)))
+          (let ((subsum (org-gantt-get-subheadline-progress-summation ch calc-progress prioritize-subsums)))
             (setq count (1+ count))
+            (message "ps: %s, ss: %s" progress-sum subsum)
             (setq progress-sum 
                   (cond 
                    ((and progress-sum subsum)
                     (+ progress-sum subsum))
                    (progress-sum progress-sum)
                    (subsum subsum)
-                   (t nil))))))))
+                   (t nil)))))
+        (and (equal calc-progress 'use-larger-100) 
+             progress)
+        (and  progress
+             (min 100 progress)))))
 
 (defun org-gantt-propagate-ds-up (headline-list &optional ordered)
   "Propagates start and end time from subelements."
@@ -631,13 +644,13 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
                          (org-gantt-get-subheadline-end replacement cur-ordered)))
         (setq newlist (append newlist (list replacement)))))))
 
-(defun org-gantt-propagate-summation-up (headline-list property subsum-getter)
+(defun org-gantt-propagate-summation-up (headline-list property subsum-getter &optional prioritize-subsums)
   "Propagates summed efforts from subelements."
   (let ((newlist nil))
     (dolist (headline headline-list newlist)
       (let ((replacement headline)
             (effort (plist-get headline property)))
-        (unless effort
+        (when (or prioritize-subsums (not effort))
           (setq replacement
                 (plist-put replacement property
                            (funcall subsum-getter replacement))))
@@ -706,7 +719,8 @@ is in the hour-minute part of time."
         (up-start (org-gantt-upcast-starttime (plist-get gi org-gantt-start-prop)))
         (down-end (org-gantt-downcast-endtime (plist-get gi org-gantt-end-prop)))
         (effort (plist-get gi org-gantt-effort-prop))
-        (clocksum (plist-get gi org-gantt-clocksum-prop)))
+        (clocksum (plist-get gi org-gantt-clocksum-prop))
+        (progress (plist-get gi org-gantt-progress-prop)))
     (concat
      prefix
      (if subelements
@@ -725,7 +739,7 @@ is in the hour-minute part of time."
        ;FIXME : use progress-prop here
        (concat
         ", progress="
-        (number-to-string (org-gantt-get-completion-percent effort clocksum))))
+        (if progress (number-to-string progress) "0")))
      "]"
      "{" (plist-get gi :name) "}"
      "{"
@@ -845,10 +859,12 @@ Returns a pgfgantt string representing that data."
                                    org-gantt-effort-prop
                                    #'org-gantt-get-subheadline-effort-sum))
         (setq org-gantt-info-list (org-gantt-compute-progress org-gantt-info-list))
+;        (message "%s" org-gantt-info-list)
         (setq org-gantt-info-list (org-gantt-propagate-summation-up
                                    org-gantt-info-list
                                    org-gantt-progress-prop
-                                   (lambda (hl) (org-gantt-get-subheadline-progress-summation hl calc-progress))))
+                                   (lambda (hl) (org-gantt-get-subheadline-progress-summation hl calc-progress t)) 
+                                   t))
         (insert
          (concat
           "\\begin{ganttchart}[time slot format=isodate, "
