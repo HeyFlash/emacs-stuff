@@ -20,20 +20,28 @@
 (defgroup org-gantt nil "Customization of org-gantt.")
 
 (defcustom org-gantt-default-hours-per-day 8
-  "The default hours in a workday.  Use :hours-per-day to overwrite this value."
+  "The default hours in a workday.  
+Use :hours-per-day to overwrite this value for individual gantt charts."
   :type '(integer)
   :group 'org-gantt)
 
 (defcustom org-gantt-default-weekend-style "{black}"
-  "The default style for the weekend lines.  Use :weekend-style to overwrite this value."
+  "The default style for the weekend lines. 
+Use :weekend-style to overwrite this value for individual gantt charts."
   :type '(string)
   :group 'org-gantt)
 
 (defcustom org-gantt-default-workday-style "{dashed}"
-  "The default style for the workday lines.  Use :workday-style to overwrite this value."
+  "The default style for the workday lines.  
+Use :workday-style to overwrite this value for individual gantt charts."
   :type '(string)
   :group 'org-gantt)
 
+(defcustom org-gantt-default-title-calendar "year, month=name, day"
+  "The default style for the title calendar. 
+Use :title-calendar to overwrite this value for individual gantt charts."
+  :type '(string)
+  :group 'org-gantt)
 
 (defconst org-gantt-start-prop :startdate
   "What is used as the start property in the constructed property list.")
@@ -805,7 +813,7 @@ Returns a pgfgantt string representing that data."
      (org-gantt-days-to-vgrid-style weekend-end work-end weekend-style workday-style)
      "}")))
 
-(defun org-dblock-write:pgf-gantt-chart (params)
+(defun org-dblock-write:org-gantt-chart (params)
   "The function that is called for updating gantt chart code"
   (let (id idpos id-as-string view-file view-pos)
     (when (setq id (plist-get params :id))
@@ -826,8 +834,8 @@ Returns a pgfgantt string representing that data."
             (get-file-buffer view-file)
           (current-buffer))
       (org-clock-sum)
-      (setq org-gantt-hours-per-day-gv (or  (plist-get params :hours-per-day) org-gantt-default-hours-per-day))
-      (let* ((titlecalendar (plist-get params :titlecalendar))
+      (setq org-gantt-hours-per-day-gv (or (plist-get params :hours-per-day) org-gantt-default-hours-per-day))
+      (let* ((titlecalendar (or (plist-get params :title-calendar) org-gantt-default-title-calendar))
              (start-date (plist-get params org-gantt-start-prop))
              (end-date (plist-get params org-gantt-end-prop))
              (additional-parameters (plist-get params :parameters))
@@ -902,6 +910,6 @@ Returns a pgfgantt string representing that data."
           (org-gantt-info-list-to-pgfgantt org-gantt-info-list show-progress)
           "\\end{ganttchart}"))))))
 
-(provide 'org-gantt-experiment)
+(provide 'org-gantt)
 
 ;;; org-gantt-experiment.el ends here

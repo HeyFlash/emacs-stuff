@@ -1,0 +1,71 @@
+#+LATEX_HEADER: \usepackage{pgfgantt}
+
+* Introduction
+org-gantt defines a custom dynamic block for org mode that can create gantt charts from org files, using headlines and their schedules, deadlines, effort and clock values.
+The latex package [[https://www.ctan.org/pkg/pgfgantt][pgfgantt]] is used to create the gantt charts, thus they are only visible on export into a pdf file.
+
+* Installation and usage
+Open org-gantt.el and run eval-buffer.
+Put the following line near the top of your org mode file:
+#+BEGIN_SRC org
+#+LATEX_HEADER: \usepackage{pgfgantt}
+#+END_SRC
+
+* User Guide
+The org-gantt block is delimited by the following lines:
+#+BEGIN_SRC org
+#+BEGIN: org-gantt-chart
+#+END:
+#+END_SRC org
+Using these delimiters without any parameters will create a custom dynamic block spanning the entire current file. As this document is written in org mode, all examples will use an :id parameter to limit the gantt chart to a specific subtree.
+
+* Deadlines and Schedules
+The simplest way of creating a gantt chart is to use hardcoded deadlines and schedules, which are created via /org-deadline/ (C-c C-d) and /org-schedule/ (C-c C-s)
+
+
+#+BEGIN_SRC org
+  ,* org-gantt-todo
+  ,** Write manual
+     SCHEDULED: <2015-05-25 Mo> DEADLINE: <2015-05-28 Do>
+  ,** Fix bugs
+     SCHEDULED: <2015-05-27 Mi> DEADLINE: <2015-05-30 Sa>
+#+BEGIN: org-gantt-chart 
+#+END
+#+END_SRC
+Updating the dynamic block will result in the following gantt chart:
+
+#+BEGIN: org-gantt-chart :id "deadlines-schedules" 
+\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-05-25}{2015-05-30}
+\gantttitlecalendar{year, month=name, day}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{org-gantt-todo}{2015-05-25}{2015-05-30}\\%2015-05-25,00:00 -- 0d 01:00 -- 2015-05-30,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\%2015-05-25,00:00 --  -- 2015-05-28,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\%2015-05-27,00:00 --  -- 2015-05-30,08:00
+\end{ganttchart}
+#+END:
+
+As you can see, org-gantt automatically calculates the start and end date for the chart. This can easily be overwritten by using the parameters ~:start-date~ and ~:end-date~:
+Thus, the dynamic block
+#+BEGIN_SRC org
+#+BEGIN: org-gantt-chart :start-date "2015-05-15" :end-date "2015-05-31"
+#+END
+#+END_SRC
+
+creates the following gantt chart:
+
+#+BEGIN: org-gantt-chart :id "deadlines-schedules" :start-date "2015-05-15" :end-date "2015-05-31"
+\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-05-15}{2015-05-31}
+\gantttitlecalendar{year, month=name, day}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{org-gantt-todo}{2015-05-25}{2015-05-30}\\%2015-05-25,00:00 -- 0d 01:00 -- 2015-05-30,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\%2015-05-25,00:00 --  -- 2015-05-28,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\%2015-05-27,00:00 --  -- 2015-05-30,08:00
+\end{ganttchart}
+#+END
+
+* COMMENT org-gantt-todo
+   :PROPERTIES:
+   :ID:       deadlines-schedules
+   :END:
+** COMMENT Write manual
+   SCHEDULED: <2015-05-25 Mo> DEADLINE: <2015-05-28 Do>
+** COMMENT Fix bugs
+  SCHEDULED: <2015-05-27 Mi> DEADLINE: <2015-05-30 Sa>
