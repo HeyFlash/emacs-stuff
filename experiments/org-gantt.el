@@ -130,15 +130,7 @@ If it is :deadline, hours-per-day is added to it."
                          (org-gantt-tp-compare ts1 ts2 ':hour-start #'<))
                      (org-gantt-tp-compare ts1 ts2 ':day-start #'<))
                  (org-gantt-tp-compare ts1 ts2 ':month-start #'<))
-             (org-gantt-tp-compare ts1 ts2 ':year-start #'<))
-
-
-           ;; (org-gantt-tp< ts1 ts2 ':year-start)
-           ;; (org-gantt-tp< ts1 ts2 ':month-start)
-           ;; (org-gantt-tp< ts1 ts2 ':day-start)
-           ;; (org-gantt-tp< ts1 ts2 ':hour-start)
-           ;; (org-gantt-tp< ts1 ts2 ':minute-start)
-           )))
+             (org-gantt-tp-compare ts1 ts2 ':year-start #'<)))))
 
 (defun org-gantt-timestamp-larger (ts1 ts2)
   "Returns true iff not timestamp ts1 is before ts2"
@@ -620,16 +612,17 @@ If a deadline or schedule conflicts with the effort, keep value and warn."
              (message "USING MINIMUM of (100, %s)" progress)
              (min 100 progress))
                                         ;        (org-gantt-propagate-summation-up subelements)
-        (dolist (ch subelements (and progress-sum count (/ progress-sum count)))
-          (let ((subsum (org-gantt-get-subheadline-progress-summation ch calc-progress prioritize-subsums)))
-            (setq count (1+ count))
+        (dolist (ch subelements (and progress-sum count (round (/ progress-sum count))))
+          (let ((subsum (org-gantt-get-subheadline-progress-summation ch calc-progress prioritize-subsums))
+                (subeffort (time-to-seconds (plist-get ch :effort))))
+            (setq count (+ count subeffort))
             (message "ps: %s, ss: %s" progress-sum subsum)
             (setq progress-sum 
                   (cond 
                    ((and progress-sum subsum)
-                    (+ progress-sum subsum))
+                    (+ progress-sum (* subeffort subsum)))
                    (progress-sum progress-sum)
-                   (subsum subsum)
+                   (subsum (* subeffort subsum))
                    (t nil)))))
         (and (equal calc-progress 'use-larger-100) 
              progress)
@@ -767,6 +760,13 @@ is in the hour-minute part of time."
         (number-to-string (floor (time-to-number-of-days effort)))
         "d "
         (format-time-string "%H:%M" effort)))
+     (when clocksum
+       (concat 
+        " -("
+        (number-to-string (floor (time-to-number-of-days clocksum)))
+        "d "
+        (format-time-string "%H:%M" effort)
+        ")- "))
      " -- "
      (when end
        (format-time-string "%Y-%m-%d,%H:%M" end))
@@ -836,21 +836,30 @@ Returns a pgfgantt string representing that data."
       (org-clock-sum)
       (setq org-gantt-hours-per-day-gv (or (plist-get params :hours-per-day) org-gantt-default-hours-per-day))
       (let* ((titlecalendar (or (plist-get params :title-calendar) org-gantt-default-title-calendar))
-             (start-date (plist-get params org-gantt-start-prop))
-             (end-date (plist-get params org-gantt-end-prop))
+             (start-date (plist-get params :start-date))
+             (end-date (plist-get params :end-date))
+             (start-date-list (and start-date (org-parse-time-string start-date)))
+             (end-date-list (and end-date (org-parse-time-string end-date)))
+             (start-date-time (and start-date-list (apply 'encode-time start-date-list)))
+             (end-date-time (and end-date-list (apply 'encode-time end-date-list)))
              (additional-parameters (plist-get params :parameters))
              (weekend-style (or (plist-get params :weekend-style) org-gantt-default-weekend-style))
              (workday-style (or (plist-get params :workday-style) org-gantt-default-workday-style))
              (today-value (plist-get params :today))
-             (show-progress (plist-get params :progress))
+             (show-progress (plist-get params :show-progress))
              (calc-progress (plist-get params :calc-progress))
+             (id-subelements (plist-get params :use-id-subheadlines))
              (parsed-buffer (org-element-parse-buffer))
              (parsed-data
               (cond ((or (not id) (eq id 'global) view-file) parsed-buffer)
                     ((eq id 'local) (error "Local id handling not yet implemented"))
                     (t (org-element-map parsed-buffer 'headline
                          (lambda (element)
-                           (if (equal (org-element-property :ID element) id) element nil))  nil t))))
+                           (if (equal (org-element-property :ID element) id) 
+                               (if id-subelements
+                                   (cdr element) 
+                                 element)
+                             nil))  nil t))))
              (org-gantt-info-list (org-gantt-crawl-headlines parsed-data))
              (org-gantt-check-info-list nil))
         (when (not parsed-data)
@@ -867,19 +876,25 @@ Returns a pgfgantt string representing that data."
                                    org-gantt-effort-prop
                                    #'org-gantt-get-subheadline-effort-sum))
         (setq org-gantt-info-list (org-gantt-compute-progress org-gantt-info-list))
-;        (message "%s" org-gantt-info-list)
+        (message "%s" (pp org-gantt-info-list))
         (setq org-gantt-info-list (org-gantt-propagate-summation-up
                                    org-gantt-info-list
                                    org-gantt-progress-prop
                                    (lambda (hl) (org-gantt-get-subheadline-progress-summation hl calc-progress t)) 
                                    t))
+        ;;FIXME: use org-gantt-info-list instead of parsed data.
+        (setq start-date-time 
+              (or start-date-time 
+                  (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'org-gantt-time-less-p)))
+        (setq end-date-time 
+              (or end-date-time
+                  (org-gantt-get-extreme-date parsed-data #'org-gantt-get-end-time
+                                              (lambda (t1 t2) (not (org-gantt-time-less-p t1 t2))))))
         (insert
          (concat
           "\\begin{ganttchart}[time slot format=isodate, "
           "vgrid="
-          (org-gantt-get-vgrid-style
-           (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'org-gantt-time-less-p)
-           weekend-style workday-style)
+          (org-gantt-get-vgrid-style start-date-time weekend-style workday-style)
           (when today-value
             (concat
              ", today="
@@ -891,16 +906,9 @@ Returns a pgfgantt string representing that data."
           (when additional-parameters
             (concat ", " additional-parameters))
           "]{"
-          (or start-date
-	      (format-time-string
-	       "%Y-%m-%d"
-	       (org-gantt-get-extreme-date parsed-data #'org-gantt-get-start-time #'org-gantt-time-less-p)))
+          (format-time-string "%Y-%m-%d" start-date-time)
           "}{"
-          (or end-date
-              (format-time-string
-	       "%Y-%m-%d"
-               (org-gantt-get-extreme-date parsed-data #'org-gantt-get-end-time
-					   (lambda (t1 t2) (not (org-gantt-time-less-p t1 t2))))))
+          (format-time-string "%Y-%m-%d" end-date-time)
           "}\n"
           "\\gantttitlecalendar{"
           (if titlecalendar

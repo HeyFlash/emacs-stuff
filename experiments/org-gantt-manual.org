@@ -1,4 +1,5 @@
 #+LATEX_HEADER: \usepackage{pgfgantt}
+#+LATEX_HEADER: \usepackage[margin=3.0cm]{geometry}
 
 * Introduction
 org-gantt defines a custom dynamic block for org mode that can create gantt charts from org files, using headlines and their schedules, deadlines, effort and clock values.
@@ -16,56 +17,233 @@ The org-gantt block is delimited by the following lines:
 #+BEGIN_SRC org
 #+BEGIN: org-gantt-chart
 #+END:
-#+END_SRC org
+#+END_SRC
 Using these delimiters without any parameters will create a custom dynamic block spanning the entire current file. As this document is written in org mode, all examples will use an :id parameter to limit the gantt chart to a specific subtree.
 
-* Deadlines and Schedules
+** Deadlines and Schedules
 The simplest way of creating a gantt chart is to use hardcoded deadlines and schedules, which are created via /org-deadline/ (C-c C-d) and /org-schedule/ (C-c C-s)
 
 
 #+BEGIN_SRC org
   ,* org-gantt-todo
-  ,** Write manual
-     SCHEDULED: <2015-05-25 Mo> DEADLINE: <2015-05-28 Do>
-  ,** Fix bugs
+   :PROPERTIES:
+   :ID:       todo-deadlines-schedules
+   :END:
+  ,** Important stuff
+  ,*** Write manual
+      SCHEDULED: <2015-05-25 Mo> DEADLINE: <2015-05-28 Do>
+  ,*** Fix bugs
      SCHEDULED: <2015-05-27 Mi> DEADLINE: <2015-05-30 Sa>
-#+BEGIN: org-gantt-chart 
-#+END
+  ,** Other stuff
+     SCHEDULED: <2015-05-20 Mi> DEADLINE: <2015-05-28 Do>
+  ,*** Add features
+      SCHEDULED: <2015-05-22 Fr> DEADLINE: <2015-05-26 Di>
+  ,*** Add missing docstrings
+      DEADLINE: <2015-05-27 Mi> SCHEDULED: <2015-05-24 So>
+
+  ,#+BEGIN: org-gantt-chart :id "todo-deadlines-schedules"
+  ,#+END
 #+END_SRC
 Updating the dynamic block will result in the following gantt chart:
 
 #+BEGIN: org-gantt-chart :id "deadlines-schedules" 
-\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-05-25}{2015-05-30}
+\begin{ganttchart}[time slot format=isodate, vgrid={*2{dashed},*3{black},*2{dashed}}]{2015-05-20}{2015-05-30}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{org-gantt-todo}{2015-05-25}{2015-05-30}\\%2015-05-25,00:00 -- 0d 01:00 -- 2015-05-30,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\%2015-05-25,00:00 --  -- 2015-05-28,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\%2015-05-27,00:00 --  -- 2015-05-30,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{org-gantt-todo}{2015-05-20}{2015-05-30}\\%2015-05-20,00:00 -- 0d 01:00 -- 2015-05-30,08:00
+  \ganttgroup[group left shift=0.0, group right shift=-0.0]{Important stuff}{2015-05-25}{2015-05-30}\\%2015-05-25,00:00 --  -- 2015-05-30,08:00
+    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\%2015-05-25,00:00 --  -- 2015-05-28,08:00
+    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\%2015-05-27,00:00 --  -- 2015-05-30,08:00
+  \ganttgroup[group left shift=0.0, group right shift=-0.0]{Other stuff}{2015-05-20}{2015-05-28}\\%2015-05-20,00:00 --  -- 2015-05-28,08:00
+    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add features}{2015-05-22}{2015-05-26}\\%2015-05-22,00:00 --  -- 2015-05-26,08:00
+    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add missing docstrings}{2015-05-24}{2015-05-27}\\%2015-05-24,00:00 --  -- 2015-05-27,08:00
 \end{ganttchart}
 #+END:
 
-As you can see, org-gantt automatically calculates the start and end date for the chart. This can easily be overwritten by using the parameters ~:start-date~ and ~:end-date~:
+As you can see, org-gantt automatically calculates the deadlines and schedules for superheadlines that do not already have them. Existing dates are not overwritten.
+Additionally, org-gantt automatically calculates the start and end date for the chart. This can easily be overwritten by using the parameters ~:start-date~ and ~:end-date~. In the previous example, the gantt chart included the top headline, for which the id was given. This is not always desirable, as it results in a single gantt group spanning the entire chart. Set the parameter ~:use-id-subheadlines~ to ~t~ in order to use only the subheadlines of the given id.
 Thus, the dynamic block
 #+BEGIN_SRC org
-#+BEGIN: org-gantt-chart :start-date "2015-05-15" :end-date "2015-05-31"
+#+BEGIN: org-gantt-chart :id "todo-deadlines-schedules" \
+ :use-id-subheadlines t \
+ :start-date "2015-05-15" :end-date "2015-05-31"
 #+END
 #+END_SRC
 
 creates the following gantt chart:
 
-#+BEGIN: org-gantt-chart :id "deadlines-schedules" :start-date "2015-05-15" :end-date "2015-05-31"
-\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-05-15}{2015-05-31}
+#+BEGIN: org-gantt-chart :id "deadlines-schedules" :use-id-subheadlines t :start-date "<2015-05-15>" :end-date "<2015-05-31>"
+\begin{ganttchart}[time slot format=isodate, vgrid={*3{black},*4{dashed}}]{2015-05-15}{2015-05-31}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{org-gantt-todo}{2015-05-25}{2015-05-30}\\%2015-05-25,00:00 -- 0d 01:00 -- 2015-05-30,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Important stuff}{2015-05-25}{2015-05-30}\\%2015-05-25,00:00 -- 0d 01:00 -- 2015-05-30,08:00
   \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\%2015-05-25,00:00 --  -- 2015-05-28,08:00
   \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\%2015-05-27,00:00 --  -- 2015-05-30,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Other stuff}{2015-05-20}{2015-05-28}\\%2015-05-20,00:00 -- 0d 01:00 -- 2015-05-28,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add features}{2015-05-22}{2015-05-26}\\%2015-05-22,00:00 --  -- 2015-05-26,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add missing docstrings}{2015-05-24}{2015-05-27}\\%2015-05-24,00:00 --  -- 2015-05-27,08:00
 \end{ganttchart}
 #+END
+
+
+** Effort
+Instead of directly writing down schedules and deadlines, you can use [[http://orgmode.org/manual/Effort-estimates.html][effort estimates]]. Whenever an effort estimate is present, either the schedule or the deadline can be omitted, and will be automatically calculated from the given effort. 
+
+*** Simple Effort Estimates
+Deadline and schedule calculation via effort estimates is done in a sophisticated manner: It takes into account the hours of work per day, and work-free weekends. This works in both directions, meaning that if ~:hours-per-day~ is ~8~ (the default value), an effort estimate of ~2d~ is equivalent to ~16:00~ and both will result in a full two days on the gantt chart.
+
+#+BEGIN: org-gantt-chart :id "effort" :use-id-subheadlines t :start-date "2015-05-15" :end-date "2015-05-31"
+\begin{ganttchart}[time slot format=isodate, vgrid={*3{black},*4{dashed}}]{2015-05-15}{2015-05-31}
+\gantttitlecalendar{year, month=name, day}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Important stuff}{2015-05-26}{2015-05-28}\\%2015-05-26,00:00 -- 1d 09:00 -- 2015-05-28,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-27}{2015-05-28}\\%2015-05-27,00:00 -- 0d 17:00 -- 2015-05-28,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-26}{2015-05-27}\\%2015-05-26,00:00 -- 0d 17:00 -- 2015-05-27,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Other stuff}{2015-05-22}{2015-05-27}\\%2015-05-22,00:00 -- 2d 01:00 -- 2015-05-27,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.625]{Add features}{2015-05-22}{2015-05-26}\\%2015-05-22,00:00 -- 0d 20:00 -- 2015-05-26,03:00
+  \ganttbar[bar left shift=0.375, bar right shift=-0.0]{Add missing docstrings}{2015-05-22}{2015-05-27}\\%2015-05-22,03:00 -- 1d 06:00 -- 2015-05-27,08:00
+\end{ganttchart}
+#+END
+
+
+Note that org-gantt correctly displays efforts that are not full days. Additionally, weekend days are not counted as workdays. When calculating deadlines and schedules, weekend days are spanned in addition to the estimated effort.
+
+*** Effort Estimates and Ordered Headlines
+Headlines can be marked as [[http://orgmode.org/manual/TODO-dependencies.html][ordered]], meaning that a subtask can only be started once the previous subtask has been finished. Due to this dependency even more deadlines and schedules can be calculated automatically: If every subtask has an effort estimate, a single deadline or schedule is enough to calculate all other times. The deadline or schedule can be attached to the supertask or to any of the subtasks.
+
+#+BEGIN: org-gantt-chart :id "ordered-space" :use-id-subheadlines t :start-date "<2015-06-20 Sa>" :end-date "<2015-07-10 Fr>"
+\begin{ganttchart}[time slot format=isodate, vgrid={*2{black},*4{dashed},*1{black}}]{2015-06-20}{2015-07-10}
+\gantttitlecalendar{year, month=name, day}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.5]{Fly to the Moon}{2015-06-22}{2015-07-07}\\%2015-06-22,00:00 -- 3d 21:00 -- 2015-07-07,04:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Buy Rocket Parts}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -- 2015-06-26,08:00
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0]{Assemble Rocket}{2015-06-29}{2015-07-01}\\%2015-06-26,08:00 -- 1d 01:00 -- 2015-07-01,08:00
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.5]{Start Rocket}{2015-07-02}{2015-07-02}\\%2015-07-01,08:00 -- 0d 05:00 -- 2015-07-02,04:00
+  \ganttlinkedbar[bar left shift=0.5, bar right shift=-0.5]{Space Flight}{2015-07-02}{2015-07-07}\\%2015-07-02,04:00 -- 1d 01:00 -- 2015-07-07,04:00
+\end{ganttchart}
+#+END
+
+This chart demonstrates that the start of a follow-up task is shifted to the following Monday, if the previous task ends exactly at the start of the weekend. Additionally, it demonstrates how follow-up days start on the same day, if ~hours-per-day~ still leaves time during that day, but start on the next day, if the previous task takes the entirety of the previous day.
+
+** Progress
+org-gantt can use [[orgmode.org/manual/Clocking-commands.html][clocking]] to calculate the progress on each item. However, the progress is currently simply calculated as the ratio of clocked time to estimated time, and thus does not constitute a realistic estimation of the real progress of a specific task. Nevertheless, it can be used to visualize progress on specific tasks.
+To show progress, use the parameter ~:show-progress~. Setting it to ~t~ will show the progress on all tasks. Setting it to ~if-clocksum~ will show progress only for those tasks with a clocksum, i.e. tasks that have been clocked, or that have subtasks that have been clocked.
+
+#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum :start-date "<2015-06-22 Mo>" :end-date "<2015-07-14 Di>"
+\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-06-22}{2015-07-14}
+\gantttitlecalendar{year, month=name, day}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0, progress=67]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\%2015-06-22,00:00 -- 5d 01:00 -(5d 01:00)-  -- 2015-07-10,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -(3d 17:00)-  -- 2015-06-26,08:00
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0, progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\%2015-06-26,08:00 -- 3d 09:00 -(1d 09:00)-  -- 2015-07-10,08:00
+\end{ganttchart}
+#+END
+
+
+This chart demonstrates that the progress calculation of org-gantt does not use progress of larger than 100% on subtasks for the calculation of the progress of supertasks, as this could lead to the impression that a supertask is (almost) finished, even if the user took too long on a single subtask, whereas other subtasks are left unfinished. To override this behaviour, set the parameter ~:calc-progress~ to ~use-larger-100~. In this case, supertasks will use the full clocked time of each subtask for the calculation of its progress value:
+
+#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum :calc-progress use-larger-100 :start-date "<2015-06-22 Mo>" :end-date "<2015-07-14 Di>"
+\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-06-22}{2015-07-14}
+\gantttitlecalendar{year, month=name, day}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0, progress=100]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\%2015-06-22,00:00 -- 5d 01:00 -(5d 01:00)-  -- 2015-07-10,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -(3d 17:00)-  -- 2015-06-26,08:00
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0, progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\%2015-06-26,08:00 -- 3d 09:00 -(1d 09:00)-  -- 2015-07-10,08:00
+\end{ganttchart}
+#+END
+
+** Styling
+
+* Reference
+** Parameters
+
 
 * COMMENT org-gantt-todo
    :PROPERTIES:
    :ID:       deadlines-schedules
    :END:
-** COMMENT Write manual
-   SCHEDULED: <2015-05-25 Mo> DEADLINE: <2015-05-28 Do>
-** COMMENT Fix bugs
-  SCHEDULED: <2015-05-27 Mi> DEADLINE: <2015-05-30 Sa>
+** Important stuff
+*** Write manual
+    SCHEDULED: <2015-05-25 Mo> DEADLINE: <2015-05-28 Do>
+*** Fix bugs
+   SCHEDULED: <2015-05-27 Mi> DEADLINE: <2015-05-30 Sa>
+** Other stuff
+   SCHEDULED: <2015-05-20 Mi> DEADLINE: <2015-05-28 Do>
+*** Add features
+    SCHEDULED: <2015-05-22 Fr> DEADLINE: <2015-05-26 Di>
+*** Add missing docstrings
+    DEADLINE: <2015-05-27 Mi> SCHEDULED: <2015-05-24 So>
+
+
+
+* COMMENT org-gantt-todo
+   :PROPERTIES:
+   :ID:       effort
+   :END:
+** Important stuff
+*** Write manual
+    DEADLINE: <2015-05-28 Do>
+    :PROPERTIES:
+    :Effort:   2d
+    :END:
+*** Fix bugs
+   SCHEDULED: <2015-05-26 Di>
+    :PROPERTIES:
+    :Effort:   16:00
+    :END:
+** Other stuff
+*** Add features
+    SCHEDULED: <2015-05-22 Fr> 
+    :PROPERTIES:
+    :Effort:   19:00
+    :END:
+*** Add missing docstrings
+    DEADLINE: <2015-05-27 Mi>
+    :PROPERTIES:
+    :Effort:   3d 5:00
+    :END:
+
+* COMMENT Ordered Task
+  :PROPERTIES:
+  :ID: ordered-space
+  :ORDERED:  t
+  :END:
+** Fly to the Moon
+   SCHEDULED: <2015-06-22 Mo>
+   :PROPERTIES:
+   :ORDERED:  t
+   :END:
+*** Buy Rocket Parts
+    :PROPERTIES:
+    :Effort:   5d
+    :END:
+*** Assemble Rocket
+    :PROPERTIES:
+    :Effort:   3d
+    :END:
+*** Start Rocket
+    :PROPERTIES:
+    :Effort:   4:00
+    :END:
+*** Space Flight
+    :PROPERTIES:
+    :Effort:   3d
+    :END:
+
+* COMMENT Using Effort
+   :PROPERTIES:
+   :ID: clock-space
+   :END:
+** Fly to Alpha Centauri
+   SCHEDULED: <2015-06-22 Mo> 
+   :PROPERTIES:
+   :ORDERED:  t
+   :END:
+*** Assemble Hyperdrive
+    CLOCK: [2015-06-22 Mo 08:00]--[2015-06-25 Do 16:00] => 80:00
+    :PROPERTIES:
+    :Effort:   5d
+    :END:
+*** Interstellar Flight
+    CLOCK: [2015-07-02 Do 10:00]--[2015-07-04 Sa 02:00] => 40:00
+    :PROPERTIES:
+    :Effort:   10d
+    :END:
+
+* COMMENT TODO-List
+** start and end time calculation (used to work)
+** progress calculation -> average of subprogress is incorrect.
