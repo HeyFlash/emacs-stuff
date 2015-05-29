@@ -1,5 +1,10 @@
+#+LATEX_HEADER: \usepackage[usenames,dvipsnames]{xcolor}
 #+LATEX_HEADER: \usepackage{pgfgantt}
 #+LATEX_HEADER: \usepackage[margin=3.0cm]{geometry}
+
+#+MACRO: DEFPAR The default value for this parameter can be set via the custom variable /org-gantt-default-$1/.
+#+MACRO: PARDESC - ~:$1~ :: $2
+#+MACRO: DPARDESC - ~:$1~ :: $2 The default value for this parameter can be set via the custom variable /org-gantt-default-$1/.
 
 * Introduction
 org-gantt defines a custom dynamic block for org mode that can create gantt charts from org files, using headlines and their schedules, deadlines, effort and clock values.
@@ -125,8 +130,8 @@ This chart demonstrates that the start of a follow-up task is shifted to the fol
 org-gantt can use [[orgmode.org/manual/Clocking-commands.html][clocking]] to calculate the progress on each item. However, the progress is currently simply calculated as the ratio of clocked time to estimated time, and thus does not constitute a realistic estimation of the real progress of a specific task. Nevertheless, it can be used to visualize progress on specific tasks.
 To show progress, use the parameter ~:show-progress~. Setting it to ~t~ will show the progress on all tasks. Setting it to ~if-clocksum~ will show progress only for those tasks with a clocksum, i.e. tasks that have been clocked, or that have subtasks that have been clocked.
 
-#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum :start-date "<2015-06-22 Mo>" :end-date "<2015-07-14 Di>"
-\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-06-22}{2015-07-14}
+#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum 
+\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-06-22}{2015-07-10}
 \gantttitlecalendar{year, month=name, day}\\
 \ganttgroup[group left shift=0.0, group right shift=-0.0, progress=67]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\%2015-06-22,00:00 -- 5d 01:00 -(5d 01:00)-  -- 2015-07-10,08:00
   \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -(3d 17:00)-  -- 2015-06-26,08:00
@@ -137,8 +142,8 @@ To show progress, use the parameter ~:show-progress~. Setting it to ~t~ will sho
 
 This chart demonstrates that the progress calculation of org-gantt does not use progress of larger than 100% on subtasks for the calculation of the progress of supertasks, as this could lead to the impression that a supertask is (almost) finished, even if the user took too long on a single subtask, whereas other subtasks are left unfinished. To override this behaviour, set the parameter ~:calc-progress~ to ~use-larger-100~. In this case, supertasks will use the full clocked time of each subtask for the calculation of its progress value:
 
-#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum :calc-progress use-larger-100 :start-date "<2015-06-22 Mo>" :end-date "<2015-07-14 Di>"
-\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-06-22}{2015-07-14}
+#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum :calc-progress use-larger-100 
+\begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-06-22}{2015-07-10}
 \gantttitlecalendar{year, month=name, day}\\
 \ganttgroup[group left shift=0.0, group right shift=-0.0, progress=100]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\%2015-06-22,00:00 -- 5d 01:00 -(5d 01:00)-  -- 2015-07-10,08:00
   \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -(3d 17:00)-  -- 2015-06-26,08:00
@@ -148,9 +153,43 @@ This chart demonstrates that the progress calculation of org-gantt does not use 
 
 ** Styling
 
+You can use all the styling parameters available in pgf-gantt (see the pgf-gantt manual for more information) by using the parameter ~:parameters~. The content of this parameter is pasted unchanged into the ganttchart parameter list. Remember that you have to escape backslashes in order for them to work. [fn:: Due to a bug in pgfgantt, it is advisable not to use the parameter ~today offset~. This parameter unintentionally influences progress rendering.]
+The exception to this are the pgf-gantt parameters ~time slot format~ and ~vgrid~. While ~time slot format~ is always set to ~isodate~ in order for org-gantt to work correctly, the ~vgrid~ parameter is used to emphasize the difference between weekend and work days. The default line style for those (settable via the custom variables ~org-gantt-default-weekend-style~ and ~org-gant-default-workday-style~) can be overwritten using the parameters ~:weekend-style~ and ~workday-style~.
+
+It therefore becomes possible to create styles such as the following (shamelessly stolen from the pgf gantt manual):
+
+#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum :workday-style "white" :weekend-style "black!10" :parameters "y unit title=0.4cm, y unit chart=0.5cm, title/.append style={draw=none, fill=RoyalBlue!50!black}, title label font=\\sffamily\\bfseries\\color{white}, title label node/.append style={below=-1.6ex}, title left shift=.05, title right shift=-.05, title height=1, bar/.append style={draw=none, fill=OliveGreen!75}, bar height=.6, bar label font=\\normalsize\\color{black!50}, group right shift=0, group top shift=.6, group height=.3, group peaks height=.2, bar incomplete/.append style={fill=Maroon}, canvas/.style={shape=rectangle, fill=black!5, draw=RoyalBlue!50!black, very thick}"
+\begin{ganttchart}[time slot format=isodate, vgrid={*4white,*3black!10}, y unit title=0.4cm, y unit chart=0.5cm, title/.append style={draw=none, fill=RoyalBlue!50!black}, title label font=\sffamily\bfseries\color{white}, title label node/.append style={below=-1.6ex}, title left shift=.05, title right shift=-.05, title height=1, bar/.append style={draw=none, fill=OliveGreen!75}, bar height=.6, bar label font=\normalsize\color{black!50}, group right shift=0, group top shift=.6, group height=.3, group peaks height=.2, bar incomplete/.append style={fill=Maroon}, canvas/.style={shape=rectangle, fill=black!5, draw=RoyalBlue!50!black, very thick}]{2015-06-22}{2015-07-10}
+\gantttitlecalendar{year, month=name, day}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0, progress=67]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\%2015-06-22,00:00 -- 5d 01:00 -(5d 01:00)-  -- 2015-07-10,08:00
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -(3d 17:00)-  -- 2015-06-26,08:00
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0, progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\%2015-06-26,08:00 -- 3d 09:00 -(1d 09:00)-  -- 2015-07-10,08:00
+\end{ganttchart}
+#+END
+
 * Reference
 ** Parameters
+#+LATEX: \noindent
+*General parameters:*
+{{{PARDESC(id, The scope of the gantt chart. If ~nil~\, use the current document. If it starts with ~file:\~\, use the given document. Otherwise\, use the headline with the given id property.)}}}
+{{{PARDESC(use-id-subheadlines, Setting this parameter to t will make the gantt chart ignore the headline of the given id, and only use its subheadlines as top level groups.)}}}
 
+
+#+LATEX: \noindent
+*Calculation parameters:*
+{{{PARDESC(calc-progress, Setting this parameter to ~use-larger-100~ will make the progress calculation use values of larger 100 for overclocked subtasks. See section [[Progress]].)}}}
+{{{DPARDESC(hours-per-day, Sets the number of work hours in a work day.)}}}
+
+#+LATEX: \noindent
+*Style parameters:*
+{{{PARDESC(end-date, The end date of the chart. By default the date will be calculated as the latest date in the gantt chart.)}}}
+{{{PARDESC(parameters, Additional parameters added to the parameter list of the ~\begin{ganttchart}~ command. Any parameters allowed by pgfgantt can be used, except those mentioned in section [[Styling]].)}}}
+{{{PARDESC(show-progress, Setting this parameter to it to ~t~ will show the progress on all tasks. Setting it to ~if-clocksum~ will show progress only for those tasks with a clocksum\, i.e. tasks that have been clocked\, or that have subtasks that have been clocked. ~nil~ (the default) will not show progress on any tasks.)}}}
+{{{PARDESC(start-date, The start date of the chart. By default the date will be calculated as the earliest date in the gantt chart.)}}}
+{{{DPARDESC(title-calendar, Sets the title calendar\, that is the content of the pgfgantt command ~\ganttitlecalendar{content}~.)}}}
+{{{PARDESC(today, If set to t\, the current date is highlighted as today in the gantt chart. If set to a timestamp\, the given date is highlighted as today. If not set\, no today value is used.)}}}
+{{{DPARDESC(weekend-style, The style used for delimiting weekend days.)}}}
+{{{DPARDESC(workday-style, The style used for delimiting workday days.)}}}
 
 * COMMENT org-gantt-todo
    :PROPERTIES:
