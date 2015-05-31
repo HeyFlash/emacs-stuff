@@ -55,6 +55,31 @@ Use :title-calendar to overwrite this value for individual gantt charts."
   :type '(string)
   :group 'org-gantt)
 
+(defcustom org-gantt-default-incomplete-date-headlines 'inactive
+  "The default treatment for headlines that have either deadline or schedule
+\(also computed\), but not both.
+'keep will place the headline normally, with a length of 0.
+'inactive will place the headline, but distinguish it via inactive-style.
+'ignore will not place the headline onto the chart."
+  :type '(symbol)
+  :options '(keep inactive ignore)
+  :group 'org-gantt)
+
+(defcustom org-gantt-default-no-date-headlines 'inactive
+  "The default treatment for headlines that have neither deadline or schedule.
+'keep will place the headline at the first day, with a length of 0.
+'inactive will place the headline, but distinguish it via inactive-style.
+'ignore will not place the headline onto the chart."
+  :type '(symbol)
+  :options '(keep inactive ignore)
+  :group 'org-gantt)
+
+(defcustom org-gantt-output-debug-dates nil
+  "Decides whether to put out some extra information about the computed dates
+as a latex comment after each gantt bar."
+  :type '(boolean)
+  :group 'org-gantt)
+
 (defconst org-gantt-start-prop :startdate
   "What is used as the start property in the constructed property list.")
 
@@ -72,6 +97,10 @@ Use :title-calendar to overwrite this value for individual gantt charts."
 
 (defvar org-gant-hours-per-day-gv nil
   "Global variable for local hours-per-day.")
+
+(defvar org-gantt-options nil
+  "Global variable that keeps a plist of the current options.
+Is filled with local or default options.")
 
 (defun org-gantt-hours-per-day ()
   "Get the hours per day."
@@ -678,12 +707,12 @@ to the start of the next day."
         (if (> es 0) (round (* 100  (/ css es)))  0))
     0))
 
-(defun org-gantt-info-to-pgfgantt (gi &optional show-progress prefix ordered linked)
+(defun org-gantt-info-to-pgfgantt (gi default-date &optional show-progress prefix ordered linked)
   "Create a pgfgantt string from gantt-info GI.
 Create progress information, if SHOW-PROGRESS is true.
 Prefix the created string with PREFIX.
 ORDERED determines whether the current headaline is ordered
-\(Required for correct linking of sub-subheadlines).
+\(Required for correct linking of sub-subheadlines\).
 Create a bar linked to the previous bar, if LINKED is non-nil."
   (let ((subelements (plist-get gi :subelements))
         (start (plist-get gi org-gantt-start-prop))
@@ -692,72 +721,90 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
         (down-end (org-gantt-downcast-endtime (plist-get gi org-gantt-end-prop)))
         (effort (plist-get gi org-gantt-effort-prop))
         (clocksum (plist-get gi org-gantt-clocksum-prop))
-        (progress (plist-get gi org-gantt-progress-prop)))
-    (concat
-     prefix
-     (if subelements
-         (if linked "\\ganttlinkedgroup" "\\ganttgroup")
-       (if linked "\\ganttlinkedbar" "\\ganttbar"))
-     "["
-     (if subelements "group left shift=" "bar left shift=")
-     (number-to-string (org-gantt-get-day-ratio up-start))
-     (if subelements ", group right shift=" ", bar right shift=")
-     (number-to-string (if (>  (org-gantt-get-day-ratio down-end) 0)
-                           (* -1.0 (- 1.0 (org-gantt-get-day-ratio down-end)))
-                         0))
-     (when (or (equal show-progress t)
-               (and (equal show-progress 'if-clocksum)
-                    clocksum))
-       ;FIXME : use progress-prop here
-       (concat
-        ", progress="
-        (if progress (number-to-string progress) "0")))
-     "]"
-     "{" (plist-get gi :name) "}"
-     "{"
-     (when up-start
-       (format-time-string "%Y-%m-%d" up-start))
-     "}"
-     "{"
-     (when down-end
-       (format-time-string "%Y-%m-%d" down-end))
-     "}"
-     "\\\\%"
-     (when start
-       (format-time-string "%Y-%m-%d,%H:%M" start))
-     " -- "
-     (when effort
-       (concat
-        (number-to-string (floor (time-to-number-of-days effort)))
-        "d "
-        (format-time-string "%H:%M" effort)))
-     (when clocksum
-       (concat
-        " -("
-        (number-to-string (floor (time-to-number-of-days clocksum)))
-        "d "
-        (format-time-string "%H:%M" effort)
-        ")- "))
-     " -- "
-     (when end
-       (format-time-string "%Y-%m-%d,%H:%M" end))
-     "\n"
-     (when subelements
-       (org-gantt-info-list-to-pgfgantt
-	subelements
-        show-progress
-	(concat prefix "  ")
-        (or ordered (plist-get gi :ordered)))))))
+        (progress (plist-get gi org-gantt-progress-prop))
+	(ignore-this nil))
+    (cond ((and (not up-start) (not down-end))
+	   (when (equal (plist-get org-gantt-options :no-date-headlines) 'ignore)
+	     (setq ignore-this t))
+	   (setq up-start default-date)
+	   (setq down-end default-date))
+	  ((not down-end)
+	   (when (equal (plist-get org-gantt-options :incomplete-date-headlines) 'ignore)
+	     (setq ignore-this t))
+	   (setq down-end up-start))
+	  ((not up-start)
+	   (when (equal (plist-get org-gantt-options :incomplete-date-headlines) 'ignore)
+	     (setq ignore-this t))
+	   (setq up-start down-end)))
+    (unless ignore-this
+      (concat
+       prefix
+       (if subelements
+	   (if linked "\\ganttlinkedgroup" "\\ganttgroup")
+	 (if linked "\\ganttlinkedbar" "\\ganttbar"))
+       "["
+       (if subelements "group left shift=" "bar left shift=")
+       (number-to-string (org-gantt-get-day-ratio up-start))
+       (if subelements ", group right shift=" ", bar right shift=")
+       (number-to-string (if (>  (org-gantt-get-day-ratio down-end) 0)
+			     (* -1.0 (- 1.0 (org-gantt-get-day-ratio down-end)))
+			   0))
+       (when (or (equal show-progress t)
+		 (and (equal show-progress 'if-clocksum)
+		      clocksum))
+					;FIXME : use progress-prop here
+	 (concat
+	  ", progress="
+	  (if progress (number-to-string progress) "0")))
+       "]"
+       "{" (plist-get gi :name) "}"
+       "{"
+       (when up-start
+	 (format-time-string "%Y-%m-%d" up-start))
+       "}"
+       "{"
+       (when down-end
+	 (format-time-string "%Y-%m-%d" down-end))
+       "}"
+       "\\\\"
+       (when org-gantt-output-debug-dates
+	 "%"
+	 (when start
+	   (format-time-string "%Y-%m-%d,%H:%M" start))
+	 " -- "
+	 (when effort
+	   (concat
+	    (number-to-string (floor (time-to-number-of-days effort)))
+	    "d "
+	    (format-time-string "%H:%M" effort)))
+	 (when clocksum
+	   (concat
+	    " -("
+	    (number-to-string (floor (time-to-number-of-days clocksum)))
+	    "d "
+	    (format-time-string "%H:%M" effort)
+	    ")- "))
+	 " -- "
+	 (when end
+	   (format-time-string "%Y-%m-%d,%H:%M" end)))
+       "\n"
+       (when subelements
+	 (org-gantt-info-list-to-pgfgantt
+	  subelements
+	  default-date
+	  show-progress
+	  (concat prefix "  ")
+	  (or ordered (plist-get gi :ordered))))))))
 
-(defun org-gantt-info-list-to-pgfgantt (data &optional show-progress prefix ordered)
+(defun org-gantt-info-list-to-pgfgantt (data default-date &optional show-progress prefix ordered)
   "Return a pgfgantt string representing DATA.
 Create progress information, if SHOW-PROGRESS is true.
 Prefix each line of the created representation with PREFIX.
 Create correctly linked representation, if ORDERED is non-nil."
   (concat
-   (org-gantt-info-to-pgfgantt (car data) show-progress prefix ordered nil)
+   (org-gantt-info-to-pgfgantt (car data) default-date show-progress prefix ordered nil)
    (mapconcat (lambda (datum)
-                (org-gantt-info-to-pgfgantt datum show-progress prefix ordered ordered))
+                (org-gantt-info-to-pgfgantt datum default-date show-progress prefix ordered ordered))
               (cdr data)
               "")))
 
@@ -839,6 +886,12 @@ PARAMS determine several options of the gantt chart."
                              nil))  nil t))))
              (org-gantt-info-list (org-gantt-crawl-headlines parsed-data))
              (org-gantt-check-info-list nil))
+	(setq org-gantt-options
+	      (list :no-date-headlines
+		    (or (plist-get params :no-date-headlines) org-gantt-default-no-date-headlines)
+		    :incomplete-date-headlines
+		    (or (plist-get params :incomplete-date-headlines)
+			org-gantt-default-incomplete-date-headlines)))
         (when (not parsed-data)
           (error "Could not find element with :ID: %s" id))
         (while (not (equal org-gantt-info-list org-gantt-check-info-list))
@@ -865,7 +918,6 @@ PARAMS determine several options of the gantt chart."
                    org-gantt-info-list
                    (lambda (info) (plist-get info org-gantt-start-prop))
                    #'org-gantt-time-less-p)))
-        (message "END-DATE %s" end-date-time)
         (setq end-date-time
               (or end-date-time
                   (org-gantt-get-extreme-date-il
@@ -897,7 +949,7 @@ PARAMS determine several options of the gantt chart."
               titlecalendar
             "year, month=name, day")
           "}\\\\\n"
-          (org-gantt-info-list-to-pgfgantt org-gantt-info-list show-progress)
+          (org-gantt-info-list-to-pgfgantt org-gantt-info-list start-date-time show-progress)
           "\\end{ganttchart}"))))))
 
 (provide 'org-gantt)
