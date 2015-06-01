@@ -2,16 +2,12 @@
 #+LATEX_HEADER: \usepackage{lscape}
 
 * Something
-:PROPERTIES:
-:ID: testid
-:END:
 ** Else
-   DEADLINE: <2015-05-21 Do> SCHEDULED: <2015-04-29 Mi>
+   DEADLINE: <2015-07-22 Mi> SCHEDULED: <2015-04-29 Mi>
    :PROPERTIES:
    :CUSTOM_ID: Else123
    :END:
 ** don't bother
-   SCHEDULED: <2015-05-06 Mi> DEADLINE: <2015-05-22 Fr>
 * Ordered-Test 
    DEADLINE: <2015-05-26 Di>
   :PROPERTIES:
@@ -27,37 +23,7 @@
    :END:
 ** Order2
    CLOCK: [2015-05-27 Mi 13:35]--[2015-05-27 Mi 21:35] =>  8:00
-   :\begin{ganttchart}[time slot format=isodate, vgrid={*2{dashed},*3{black},*2{dashed}}]{2015-04-29}{2015-06-04}
-\gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Something}{2015-04-29}{2015-05-22}\\%2015-04-29,00:00 -- 0d 01:00 -- 2015-05-22,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Else}{2015-04-29}{2015-05-21}\\%2015-04-29,00:00 --  -- 2015-05-21,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{don't bother}{2015-05-06}{2015-05-22}\\%2015-05-06,00:00 --  -- 2015-05-22,08:00
-\ganttgroup[group left shift=0.0, group right shift=-0.0, progress=67]{Ordered-Test}{2015-05-22}{2015-05-26}\\%2015-05-22,00:00 -- 1d 01:00 -(1d 01:00)-  -- 2015-05-26,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Order1}{2015-05-22}{2015-05-22}\\%2015-05-22,00:00 -- 0d 09:00 -(0d 09:00)-  -- 2015-05-25,00:00
-  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0, progress=50]{Order2}{2015-05-25}{2015-05-26}\\%2015-05-25,00:00 -- 0d 17:00 -(0d 17:00)-  -- 2015-05-26,08:00
-\ganttgroup[group left shift=0.0, group right shift=-0.625]{Ordered-Test2}{2015-05-21}{2015-05-25}\\%2015-05-21,00:00 -- 0d 20:00 -- 2015-05-25,03:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Order3}{2015-05-21}{2015-05-21}\\%2015-05-21,00:00 -- 0d 09:00 -- 2015-05-22,00:00
-  \ganttlinkedgroup[group left shift=0.0, group right shift=-0.625]{Order4}{2015-05-22}{2015-05-25}\\%2015-05-22,00:00 --  -- 2015-05-25,03:00
-    \ganttbar[bar left shift=0.0, bar right shift=-0.625]{SO 1}{2015-05-22}{2015-05-22}\\%2015-05-22,00:00 -- 0d 04:00 -- 2015-05-22,03:00
-    \ganttlinkedbar[bar left shift=0.375, bar right shift=-0.0]{SO 2}{2015-05-22}{2015-05-22}\\%2015-05-22,03:00 -- 0d 06:00 -- 2015-05-25,00:00
-    \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.625]{SO 3}{2015-05-25}{2015-05-25}\\%2015-05-25,00:00 -- 0d 04:00 -- 2015-05-25,03:00
-\ganttbar[bar left shift=0.0, bar right shift=-0.0]{Direct Schedule Test}{2015-05-30}{2015-06-04}\\%2015-05-30,00:00 -- 0d 01:00 -- 2015-06-04,08:00
-\end{ganttchart}\begin{ganttchart}[time slot format=isodate, vgrid={*2{dashed},*3{black},*2{dashed}}]{2015-04-29}{2015-06-04}
-\gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Something}{2015-04-29}{2015-05-22}\\%2015-04-29,00:00 -- 0d 01:00 -- 2015-05-22,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Else}{2015-04-29}{2015-05-21}\\%2015-04-29,00:00 --  -- 2015-05-21,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{don't bother}{2015-05-06}{2015-05-22}\\%2015-05-06,00:00 --  -- 2015-05-22,08:00
-\ganttgroup[group left shift=2.20625, group right shift=-0.0, progress=0]{Ordered-Test}{}{2015-05-26}\\% -- 0d 09:00 -(1d 09:00)-  -- 2015-05-26,08:00
-  \ganttbar[bar left shift=2.20625, bar right shift=1.2062499999999998, progress=200]{Order1}{}{}\\% -- 0d 09:00 -(0d 09:00)-  -- 
-  \ganttlinkedbar[bar left shift=2.20625, bar right shift=-0.0, progress=0]{Order2}{}{2015-05-26}\\% --  -(0d 17:39)-  -- 2015-05-26,08:00
-\ganttgroup[group left shift=0.0, group right shift=-0.625]{Ordered-Test2}{2015-05-21}{2015-05-25}\\%2015-05-21,00:00 -- 0d 20:00 -- 2015-05-25,03:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Order3}{2015-05-21}{2015-05-21}\\%2015-05-21,00:00 -- 0d 09:00 -- 2015-05-22,00:00
-  \ganttlinkedgroup[group left shift=0.0, group right shift=-0.625]{Order4}{2015-05-22}{2015-05-25}\\%2015-05-22,00:00 --  -- 2015-05-25,03:00
-    \ganttbar[bar left shift=0.0, bar right shift=-0.625]{SO 1}{2015-05-22}{2015-05-22}\\%2015-05-22,00:00 -- 0d 04:00 -- 2015-05-22,03:00
-    \ganttlinkedbar[bar left shift=0.375, bar right shift=-0.0]{SO 2}{2015-05-22}{2015-05-22}\\%2015-05-22,03:00 -- 0d 06:00 -- 2015-05-25,00:00
-    \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.625]{SO 3}{2015-05-25}{2015-05-25}\\%2015-05-25,00:00 -- 0d 04:00 -- 2015-05-25,03:00
-\ganttbar[bar left shift=0.0, bar right shift=-0.0]{Direct Schedule Test}{2015-05-30}{2015-06-04}\\%2015-05-30,00:00 -- 0d 01:00 -- 2015-06-04,08:00
-\end{ganttchart}PROPERTIES:
+   :PROPERTIES:
    :Effort:   2d
    :END:
 * Ordered-Test2 
@@ -87,15 +53,17 @@
 * Direct Schedule Test
   DEADLINE: <2015-06-04 Do> SCHEDULED: <2015-05-30 Sa>
 
-
 #+BEGIN_landscape
-#+BEGIN: pgf-gantt-chart :id "testid" :title-calendar "year, month=name, day" :weekend-style "{draw=blue!10, line width=1pt}" :workday-style "{draw=blue!5, line width=.75pt}" :progress if-clocksum :parameters "y unit title=.7cm, y unit chart=.9cm" 
-\begin{ganttchart}[time slot format=isodate, vgrid={*2{draw=blue!5, line width=.75pt},*3{draw=blue!10, line width=1pt},*2{draw=blue!5, line width=.75pt}}, y unit title=.7cm, y unit chart=.9cm]{2015-04-29}{2015-05-22}
-\gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Something}{2015-04-29}{2015-05-22}\\%2015-04-29,00:00 -- 0d 01:00 -- 2015-05-22,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Else}{2015-04-29}{2015-05-21}\\%2015-04-29,00:00 --  -- 2015-05-21,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{don't bother}{2015-05-06}{2015-05-22}\\%2015-05-06,00:00 --  -- 2015-05-22,08:00
+#+BEGIN: org-gantt-chart :lowlevel-scale 0.5 :maxlevel 1 :title-calendar "year, month=name" :weekend-style "{draw=blue!10, line width=1pt}" :workday-style "{draw=blue!5, line width=.75pt}" :progress if-clocksum :no-date-headlines inactive :parameters "y unit title=.7cm, y unit chart=.9cm" 
+\begin{tikzpicture}\pgflowlevel{\pgftransformscale{0.5}}
+\begin{ganttchart}[time slot format=isodate, vgrid={*2{draw=blue!5, line width=.75pt},*3{draw=blue!10, line width=1pt},*2{draw=blue!5, line width=.75pt}}, y unit title=.7cm, y unit chart=.9cm]{2015-04-29}{2015-07-22}
+\gantttitlecalendar{year, month=name}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Something}{2015-04-29}{2015-07-22}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Ordered-Test}{2015-05-22}{2015-05-26}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.625]{Ordered-Test2}{2015-05-21}{2015-05-25}\\
+\ganttbar[bar left shift=0.0, bar right shift=-0.0]{Direct Schedule Test}{2015-05-30}{2015-06-04}\\
 \end{ganttchart}
+\end{tikzpicture}
 #+END:
 #+END_landscape
 
