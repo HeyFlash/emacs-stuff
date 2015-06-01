@@ -86,6 +86,31 @@ or no-date-headlines."
   :type '(integer)
   :group 'org-gantt)
 
+(defcustom org-gantt-default-tags-bar-style nil
+  "An alist that associates tags to styles for bars in the form (tag . style)."
+  :type '(alist :key-type string :value-type string)
+  :group 'org-gantt)
+
+(defcustom org-gantt-default-tags-group-style nil
+  "An alist that associates tags to styles for groups in the form (tag . style)."
+  :type '(alist :key-type string :value-type string)
+  :group 'org-gantt)
+
+(defcustom org-gantt-default-use-tags nil
+  "A list of tags for which the bars/groups should be printed.
+All headlines without those tags will not be printed.
+nil means print all."
+  :type '(repeat string)
+  :group 'org-gantt)
+
+(defcustom org-gantt-default-ignore-tags nil
+  "A list of tags for which the bars/groups should not be printed.
+All headlines with those tags will not be printed.
+Can not be (sensibly) used in combination with org-gantt-default-use-tags.
+nil means print all."
+  :type '(repeat string)
+  :group 'org-gantt)
+
 (defcustom org-gantt-default-maxlevel nil
   "The default maximum levels used for org-gantt charts. 
 nil means the complete tree is used."
@@ -112,6 +137,9 @@ as a latex comment after each gantt bar."
 
 (defconst org-gantt-progress-prop :progress
   "What is used as the progress property in the constructed property list.")
+
+(defconst org-gantt-tags-prop :tags
+  "What is used as the tasg property in the constructed property list.")
 
 (defvar org-gant-hours-per-day-gv nil
   "Global variable for local hours-per-day.")
@@ -241,8 +269,8 @@ the combined effort of subheadlines is used."
 (defun org-gantt-create-gantt-info (element)
   "Create a gantt-info for ELEMENT.
 A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop org-gantt-effort-prop :subelements"
-  (list ':name (org-element-property ':raw-value element)
-	':ordered (org-element-property :ORDERED element)
+  (list :name (org-element-property :raw-value element)
+	:ordered (org-element-property :ORDERED element)
         org-gantt-start-prop (org-gantt-get-start-time element)
         org-gantt-end-prop (org-gantt-get-end-time element)
         org-gantt-effort-prop (org-gantt-get-effort
@@ -250,8 +278,9 @@ A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop
                                ;(make-symbol (concat ":" (upcase org-effort-property)))
                                )
         org-gantt-clocksum-prop (org-gantt-effort-to-time (org-element-property :CLOCKSUM element) 24) ;clocksum is computed automatically with 24 hours per day, therefore we use 24.
+        org-gantt-tags-prop (org-element-property :tags element)
 ;        (org-gantt-get-effort element :CLOCKSUM)
-        ':subelements (org-gantt-crawl-headlines (cdr element))))
+        :subelements (org-gantt-crawl-headlines (cdr element))))
 
 (defun org-gantt-crawl-headlines (data)
   "Crawl the parsed DATA and return a gantt-info-list from the headlines."
@@ -618,7 +647,7 @@ from subheadlines, even if a headline has a progress."
           (let ((subsum (org-gantt-get-subheadline-progress-summation ch calc-progress prioritize-subsums))
                 (subeffort (time-to-seconds (plist-get ch :effort))))
             (setq count (+ count subeffort))
-            (message "ps: %s, ss: %s" progress-sum subsum)
+;            (message "ps: %s, ss: %s" progress-sum subsum)
             (setq progress-sum
                   (cond
                    ((and progress-sum subsum)
@@ -728,6 +757,20 @@ to the start of the next day."
         (if (> es 0) (round (* 100  (/ css es)))  0))
     0))
 
+(defun org-gantt-get-tags-style (tags tags-styles)
+  "Return the style appropriate for the given TAGS as noted by TAGS-STYLE.
+i.e. the first found style."
+  (let ((style nil))
+    (message "TAGS: %s, TAGS-STYLES: %s" tags tags-styles)
+    (dolist (tag tags style)
+      (and (not style) (setq style (cdr (assoc tag tags-styles)))))))
+
+(defun org-gantt-is-in-tags (tags taglist)
+  "Return true iff any member of TAGLIST is in TAGS."
+  (let ((ismember nil))
+    (dolist (ct taglist ismember)
+      (setq ismember (or ismember (member ct tags))))))
+
 (defun org-gantt-info-to-pgfgantt (gi default-date level &optional show-progress prefix ordered linked)
   "Create a pgfgantt string from gantt-info GI.
 Create progress information, if SHOW-PROGRESS is true.
@@ -735,21 +778,28 @@ Prefix the created string with PREFIX.
 ORDERED determines whether the current headaline is ordered
 \(Required for correct linking of sub-subheadlines\).
 Create a bar linked to the previous bar, if LINKED is non-nil."
-  (let ((subelements (plist-get gi :subelements))
-        (start (plist-get gi org-gantt-start-prop))
-        (end (plist-get gi org-gantt-end-prop))
-        (up-start (org-gantt-upcast-starttime (plist-get gi org-gantt-start-prop)))
-        (down-end (org-gantt-downcast-endtime (plist-get gi org-gantt-end-prop)))
-        (effort (plist-get gi org-gantt-effort-prop))
-        (clocksum (plist-get gi org-gantt-clocksum-prop))
-        (progress (plist-get gi org-gantt-progress-prop))
-        (no-date-headlines (plist-get org-gantt-options :no-date-headlines))
-        (incomplete-date-headlines (plist-get org-gantt-options :incomplete-date-headlines))
-        (inactive-bar-style (plist-get org-gantt-options :inactive-bar-style))
-        (inactive-group-style (plist-get org-gantt-options :inactive-group-style))
-        (maxlevel (plist-get org-gantt-options :maxlevel))
-        (inactive-style)
-	(ignore-this nil))
+  (let* ((subelements (plist-get gi :subelements))
+         (start (plist-get gi org-gantt-start-prop))
+         (end (plist-get gi org-gantt-end-prop))
+         (up-start (org-gantt-upcast-starttime (plist-get gi org-gantt-start-prop)))
+         (down-end (org-gantt-downcast-endtime (plist-get gi org-gantt-end-prop)))
+         (effort (plist-get gi org-gantt-effort-prop))
+         (clocksum (plist-get gi org-gantt-clocksum-prop))
+         (progress (plist-get gi org-gantt-progress-prop))
+         (tags (plist-get gi org-gantt-tags-prop))
+         (no-date-headlines (plist-get org-gantt-options :no-date-headlines))
+         (incomplete-date-headlines (plist-get org-gantt-options :incomplete-date-headlines))
+         (inactive-bar-style (plist-get org-gantt-options :inactive-bar-style))
+         (inactive-group-style (plist-get org-gantt-options :inactive-group-style))
+         (maxlevel (plist-get org-gantt-options :maxlevel))
+         (tags-bar-style (plist-get org-gantt-options :tags-bar-style))
+         (tags-group-style (plist-get org-gantt-options :tags-group-style))
+         (ctag-group-style (org-gantt-get-tags-style tags tags-group-style))
+         (ctag-bar-style (org-gantt-get-tags-style tags tags-bar-style))
+         (ignore-tags (plist-get org-gantt-options :ignore-tags))
+         (use-tags (plist-get org-gantt-options :use-tags))
+         (inactive-style)
+         (ignore-this nil))
     (cond ((and (not up-start) (not down-end))
 	   (when (equal no-date-headlines 'ignore)
 	     (setq ignore-this t))
@@ -763,6 +813,10 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 	   (when (equal incomplete-date-headlines 'ignore)
 	     (setq ignore-this t))
 	   (setq up-start down-end)))
+    (when (and ignore-tags (org-gantt-is-in-tags tags ignore-tags))
+      (setq ignore-this t))
+    (when (and use-tags (not (org-gantt-is-in-tags tags use-tags)))
+      (setq ignore-this t))
     (unless ignore-this
       (concat
        prefix
@@ -783,11 +837,15 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 	 (concat
 	  ", progress="
 	  (if progress (number-to-string progress) "0")))
-       (when (or (and (not up-start) (not down-end) (equal no-date-headlines 'inactive))
-                 (and (or (not up-start) (not down-end)) (equal incomplete-date-headlines 'inactive)))
-         (if subelements
-             (concat ", " inactive-group-style)
-           (concat ", " inactive-bar-style)))
+       (cond ((or (and (not up-start) (not down-end) (equal no-date-headlines 'inactive))
+                  (and (or (not up-start) (not down-end)) (equal incomplete-date-headlines 'inactive)))
+              (if subelements
+                  (concat ", " inactive-group-style)
+                (concat ", " inactive-bar-style)))
+             ((and subelements ctag-group-style)
+              (concat ", " ctag-group-style))
+             ((and (not subelements) ctag-bar-style)
+              (concat ", " ctag-bar-style)))
        "]"
        "{" 
        (apply #'concat (split-string (plist-get gi :name) "%" t)) "}"
@@ -935,6 +993,14 @@ PARAMS determine several options of the gantt chart."
                     (or (plist-get params :inactive-bar-style) org-gantt-default-inactive-bar-style)
                     :inactive-group-style
                     (or (plist-get params :inactive-group-style) org-gantt-default-inactive-group-style)
+                    :tags-bar-style
+                    (or (plist-get params :tags-bar-style) org-gantt-default-tags-bar-style)
+                    :tags-group-style
+                    (or (plist-get params :tags-group-style) org-gantt-default-tags-group-style)
+                    :use-tags
+                    (or (plist-get params :use-tags) org-gantt-default-use-tags)
+                    :ignore-tags
+                    (or (plist-get params :ignore-tags) org-gantt-default-ignore-tags)
                     :maxlevel
                     (or (plist-get params :maxlevel) org-gantt-default-maxlevel)))
         (when (not parsed-data)
@@ -951,7 +1017,7 @@ PARAMS determine several options of the gantt chart."
                                    org-gantt-effort-prop
                                    #'org-gantt-get-subheadline-effort-sum))
         (setq org-gantt-info-list (org-gantt-compute-progress org-gantt-info-list))
-        (message "%s" (pp org-gantt-info-list))
+;        (message "%s" (pp org-gantt-info-list))
         (setq org-gantt-info-list (org-gantt-propagate-summation-up
                                    org-gantt-info-list
                                    org-gantt-progress-prop
