@@ -1,5 +1,6 @@
 #+LATEX_HEADER: \usepackage{pgfgantt}
 #+LATEX_HEADER: \usepackage{lscape}
+#+LATEX_HEADER: \usepackage{graphicx}
 
 * Something
 ** Else
@@ -54,8 +55,8 @@
   DEADLINE: <2015-06-04 Do> SCHEDULED: <2015-05-30 Sa>
 
 #+BEGIN_landscape
-#+BEGIN: org-gantt-chart :lowlevel-scale 0.5 :title-calendar "year, month=name" :weekend-style "{draw=blue!10, line width=1pt}" :workday-style "{draw=blue!5, line width=.75pt}" :progress if-clocksum :no-date-headlines inactive :parameters "y unit title=.7cm, y unit chart=.9cm" :tags-group-style (("test"."group label font=\\color{blue}")("toast"."group label font=\\color{green}"))
-\begin{tikzpicture}\pgflowlevel{\pgftransformscale{0.5}}
+#+BEGIN: org-gantt-chart :tikz-options "scale=0.5, every node/.style={scale=0.5}" :title-calendar "year, month=name" :weekend-style "{draw=blue!10, line width=1pt}" :workday-style "{draw=blue!5, line width=.75pt}" :progress if-clocksum :no-date-headlines inactive :parameters "y unit title=.7cm, y unit chart=.9cm" :tags-group-style (("test"."group label font=\\color{blue}")("toast"."group label font=\\color{green}"))
+\begin{tikzpicture}[scale=0.5, every node/.style={scale=0.5}]
 \begin{ganttchart}[time slot format=isodate, vgrid={*2{draw=blue!5, line width=.75pt},*3{draw=blue!10, line width=1pt},*2{draw=blue!5, line width=.75pt}}, y unit title=.7cm, y unit chart=.9cm]{2015-04-29}{2015-07-22}
 \gantttitlecalendar{year, month=name}\\
 \ganttgroup[group left shift=0.0, group right shift=-0.0]{Something}{2015-04-29}{2015-07-22}\\

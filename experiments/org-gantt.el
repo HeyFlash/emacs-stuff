@@ -969,7 +969,7 @@ PARAMS determine several options of the gantt chart."
              (show-progress (plist-get params :show-progress))
              (calc-progress (plist-get params :calc-progress))
              (id-subelements (plist-get params :use-id-subheadlines))
-             (lowlevel-scale (plist-get params :lowlevel-scale))
+             (tikz-options (plist-get params :tikz-options))
              (parsed-buffer (org-element-parse-buffer))
              (parsed-data
               (cond ((or (not id) (eq id 'global) view-file) parsed-buffer)
@@ -1037,11 +1037,11 @@ PARAMS determine several options of the gantt chart."
                    #'org-gantt-time-larger-p)))
         (insert
          (concat
-          (when lowlevel-scale
+          (when tikz-options
             (concat
-             "\\begin{tikzpicture}\\pgflowlevel{\\pgftransformscale{" 
-             (number-to-string lowlevel-scale)
-             "}}\n"))
+             "\\begin{tikzpicture}[" 
+             tikz-options
+             "]\n"))
           "\\begin{ganttchart}[time slot format=isodate, "
           "vgrid="
           (org-gantt-get-vgrid-style start-date-time weekend-style workday-style)
@@ -1067,7 +1067,7 @@ PARAMS determine several options of the gantt chart."
           "}\\\\\n"
           (org-gantt-info-list-to-pgfgantt org-gantt-info-list start-date-time 1 show-progress)
           "\\end{ganttchart}"
-          (when lowlevel-scale
+          (when tikz-options
             "\n\\end{tikzpicture}")))))))
 
 (provide 'org-gantt)
