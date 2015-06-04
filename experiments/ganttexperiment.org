@@ -4,7 +4,7 @@
 
 * Something
 ** Else
-   DEADLINE: <2015-07-22 Mi> SCHEDULED: <2015-04-29 Mi>
+   DEADLINE: <2015-06-22 Mo> SCHEDULED: <2015-05-29 Fr>
    :PROPERTIES:
    :CUSTOM_ID: Else123
    :END:
@@ -27,6 +27,7 @@
    :PROPERTIES:
    :Effort:   2d
    :END:
+** Millstone 							   :milestone:
 * Ordered-Test2 :toast:
   :PROPERTIES:
   :ORDERED:  t
@@ -37,7 +38,7 @@
    :PROPERTIES:
    :Effort:   1d
    :END:
-** Order4
+** Order4 :l2tag:
 *** SO 1
    :PROPERTIES:
    :Effort:   3:00
@@ -55,23 +56,14 @@
   DEADLINE: <2015-06-04 Do> SCHEDULED: <2015-05-30 Sa>
 
 #+BEGIN_landscape
-#+BEGIN: org-gantt-chart :tikz-options "scale=0.5, every node/.style={scale=0.5}" :title-calendar "year, month=name" :weekend-style "{draw=blue!10, line width=1pt}" :workday-style "{draw=blue!5, line width=.75pt}" :progress if-clocksum :no-date-headlines inactive :parameters "y unit title=.7cm, y unit chart=.9cm" :tags-group-style (("test"."group label font=\\color{blue}")("toast"."group label font=\\color{green}"))
+#+BEGIN: org-gantt-chart :tikz-options "scale=0.5, every node/.style={scale=0.5}" :title-calendar "year, month=name" :weekend-style "{draw=blue!10, line width=1pt}" :workday-style "{draw=blue!5, line width=.75pt}" :progress if-clocksum :no-date-headlines inactive :parameters "y unit title=.7cm, y unit chart=.9cm" :tags-group-style (("test"."group label font=\\color{blue}")("toast"."group label font=\\color{green}")) :tags-bar-style (("test"."bar label font=\\color{blue}")("toast"."bar label font=\\color{green}")) :use-tags ("l2tag")
 \begin{tikzpicture}[scale=0.5, every node/.style={scale=0.5}]
-\begin{ganttchart}[time slot format=isodate, vgrid={*2{draw=blue!5, line width=.75pt},*3{draw=blue!10, line width=1pt},*2{draw=blue!5, line width=.75pt}}, y unit title=.7cm, y unit chart=.9cm]{2015-04-29}{2015-07-22}
+\begin{ganttchart}[time slot format=isodate, vgrid={*1{draw=blue!5, line width=.75pt},*3{draw=blue!10, line width=1pt},*3{draw=blue!5, line width=.75pt}}, y unit title=.7cm, y unit chart=.9cm]{2015-05-21}{2015-06-22}
 \gantttitlecalendar{year, month=name}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Something}{2015-04-29}{2015-07-22}\\
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Else}{2015-04-29}{2015-07-22}\\
-  \ganttbar[bar left shift=0.0, bar right shift=0]{don't bother}{2015-04-29}{2015-04-29}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0, group label font=\color{blue}]{Ordered-Test}{2015-05-22}{2015-05-26}\\
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Order1}{2015-05-22}{2015-05-22}\\
-  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0]{Order2}{2015-05-25}{2015-05-26}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.625, group label font=\color{green}]{Ordered-Test2}{2015-05-21}{2015-05-25}\\
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Order3}{2015-05-21}{2015-05-21}\\
-  \ganttlinkedgroup[group left shift=0.0, group right shift=-0.625]{Order4}{2015-05-22}{2015-05-25}\\
-    \ganttbar[bar left shift=0.0, bar right shift=-0.625]{SO 1}{2015-05-22}{2015-05-22}\\
-    \ganttlinkedbar[bar left shift=0.375, bar right shift=-0.0]{SO 2}{2015-05-22}{2015-05-22}\\
-    \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.625]{SO 3}{2015-05-25}{2015-05-25}\\
-\ganttbar[bar left shift=0.0, bar right shift=-0.0]{Direct Schedule Test}{2015-05-30}{2015-06-04}\\
+  \ganttlinkedgroup[group left shift=0.0, group right shift=-0.625, group label font=\color{green}]{Order4}{2015-05-22}{2015-05-25}\\
+    \ganttbar[bar left shift=0.0, bar right shift=-0.625, bar label font=\color{green}]{SO 1}{2015-05-22}{2015-05-22}\\
+    \ganttlinkedbar[bar left shift=0.375, bar right shift=-0.0, bar label font=\color{green}]{SO 2}{2015-05-22}{2015-05-22}\\
+    \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.625, bar label font=\color{green}]{SO 3}{2015-05-25}{2015-05-25}\\
 \end{ganttchart}
 \end{tikzpicture}
 #+END:
