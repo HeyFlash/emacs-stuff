@@ -77,13 +77,13 @@ Use :title-calendar to overwrite this value for individual gantt charts."
 (defcustom org-gantt-default-inactive-bar-style "bar label font=\\color{black!50}"
   "The default styles for bars that are considered inactive by incomplete-date-headlines
 or no-date-headlines."
-  :type '(integer)
+  :type '(string)
   :group 'org-gantt)
 
 (defcustom org-gantt-default-inactive-group-style "group label font=\\color{black!50}"
   "The default styles for groups that are considered inactive by incomplete-date-headlines
 or no-date-headlines."
-  :type '(integer)
+  :type '(string)
   :group 'org-gantt)
 
 (defcustom org-gantt-default-tags-bar-style nil
@@ -101,7 +101,10 @@ or no-date-headlines."
 If value is 'current, a tag style is only applied to headlines 
 with the appropriate tag.
 If value is 'subheadlines, it applies to the headline and
-all its subheadlines.")
+all its subheadlines."
+  :type '(symbol)
+  :options '(subheadlines 'current)
+  :group 'org-gantt)
 
 (defcustom org-gantt-default-use-tags nil
   "A list of tags for which the bars/groups should be printed.
