@@ -29,6 +29,8 @@
 
 ;;; Code:
 
+(require 'calendar)
+
 (defgroup org-gantt nil "Customization of org-gantt.")
 
 (defcustom org-gantt-default-hours-per-day 8
@@ -52,6 +54,12 @@ Use :workday-style to overwrite this value for individual gantt charts."
 (defcustom org-gantt-default-title-calendar "year, month=name, day"
   "The default style for the title calendar.
 Use :title-calendar to overwrite this value for individual gantt charts."
+  :type '(string)
+  :group 'org-gantt)
+
+(defcustom org-gantt-default-compressed-title-calendar "year, month"
+  "The default style for the title calendar, if the chart is compressed.
+Use :compressed-title-calendar to overwrite this value for individual gantt charts."
   :type '(string)
   :group 'org-gantt)
 
@@ -287,6 +295,8 @@ the combined effort of subheadlines is used."
 (defun org-gantt-create-gantt-info (element)
   "Create a gantt-info for ELEMENT.
 A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop org-gantt-effort-prop :subelements"
+  (message "TITLEtype: %s" (type-of (cdr (org-element-property :title element))))
+  (message "TITLEtype: %s" (cdr (org-element-property :title element)))
   (list :name (org-element-property :raw-value element)
 	:ordered (org-element-property :ORDERED element)
         org-gantt-start-prop (org-gantt-get-start-time element)
@@ -789,6 +799,18 @@ to the start of the next day."
           (/ (float minsum) (* 60 (org-gantt-hours-per-day)))))
     0))
 
+(defun org-gantt-get-month-ratio (time)
+  "Return the ratio of the month that is passed in TIME."
+  (if time
+      (progn
+	(let* ((dt (decode-time time))
+	       (day (nth 3 dt))
+	       (month (nth 4 dt))
+	       (year (nth 5 dt))
+	       (days-in-month (calendar-last-day-of-month month year)))
+	  (/ (float day) (float days-in-month))))
+    0))
+
 (defun org-gantt-get-completion-percent (effort clocksum)
   "Return the percentage of completion of EFFORT as measured by CLOCKSUM."
   (if (and clocksum effort)
@@ -796,6 +818,25 @@ to the start of the next day."
             (es (time-to-seconds effort)))
         (if (> es 0) (round (* 100  (/ css es)))  0))
     0))
+
+(defun org-gantt-get-shifts (up-start down-end compress)
+  "Return the string describing the shift for pgf-gantt.
+Calculate the shift from UP-START and DOWN-END. 
+If compress is non-nil calculate month shifts,
+otherwise, calculate day shifts."
+  (concat
+   (if subelements "group left shift=" "bar left shift=")
+   (number-to-string
+    (if compress
+	(org-gantt-get-month-ratio up-start)
+      (org-gantt-get-day-ratio up-start)))
+   (if subelements ", group right shift=" ", bar right shift=")
+   (number-to-string
+    (if compress
+	(* -1.0 (- 1.0  (org-gantt-get-month-ratio down-end)))
+      (if (>  (org-gantt-get-day-ratio down-end) 0)
+	  (* -1.0 (- 1.0 (org-gantt-get-day-ratio down-end)))
+	0)))))
 
 (defun org-gantt-get-tags-style (tags tags-styles)
   "Return the style appropriate for the given TAGS as noted by TAGS-STYLE.
@@ -827,6 +868,7 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
          (progress (plist-get gi org-gantt-progress-prop))
          (tags (plist-get gi org-gantt-tags-prop))
 	 (parent-tags (plist-get gi org-gantt-parent-tags-prop))
+	 (compress (plist-get org-gantt-options :compress))
          (no-date-headlines (plist-get org-gantt-options :no-date-headlines))
          (incomplete-date-headlines (plist-get org-gantt-options :incomplete-date-headlines))
          (inactive-bar-style (plist-get org-gantt-options :inactive-bar-style))
@@ -880,12 +922,7 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 		(t
 		 (if linked "\\ganttlinkedbar" "\\ganttbar")))
 	  "["
-	  (if subelements "group left shift=" "bar left shift=")
-	  (number-to-string (org-gantt-get-day-ratio up-start))
-	  (if subelements ", group right shift=" ", bar right shift=")
-	  (number-to-string (if (>  (org-gantt-get-day-ratio down-end) 0)
-				(* -1.0 (- 1.0 (org-gantt-get-day-ratio down-end)))
-			      0))
+	  (org-gantt-get-shifts up-start down-end compress)
 	  (when (or (equal show-progress t)
 		    (and (equal show-progress 'if-clocksum)
 			 clocksum))
@@ -1018,6 +1055,7 @@ PARAMS determine several options of the gantt chart."
       (org-clock-sum)
       (setq org-gantt-hours-per-day-gv (or (plist-get params :hours-per-day) org-gantt-default-hours-per-day))
       (let* ((titlecalendar (or (plist-get params :title-calendar) org-gantt-default-title-calendar))
+	     (compressed-titlecalendar (or (plist-get params :compressed-title-calendar) org-gantt-default-compressed-title-calendar))
              (start-date (plist-get params :start-date))
              (end-date (plist-get params :end-date))
              (start-date-list (and start-date (org-parse-time-string start-date)))
@@ -1031,6 +1069,7 @@ PARAMS determine several options of the gantt chart."
              (show-progress (plist-get params :show-progress))
              (calc-progress (plist-get params :calc-progress))
              (id-subelements (plist-get params :use-id-subheadlines))
+	     (compress (plist-get params :compress))
              (tikz-options (plist-get params :tikz-options))
              (parsed-buffer (org-element-parse-buffer))
              (parsed-data
@@ -1067,6 +1106,7 @@ PARAMS determine several options of the gantt chart."
                     (or (plist-get params :ignore-tags) org-gantt-default-ignore-tags)
 		    :milestone-tags
 		    (or (plist-get params :milestone-tags) org-gantt-default-milestone-tags)
+		    :compress compress
                     :maxlevel
                     (or (plist-get params :maxlevel) org-gantt-default-maxlevel)))
         (when (not parsed-data)
@@ -1091,7 +1131,7 @@ PARAMS determine several options of the gantt chart."
                                    t))
 	(setq org-gantt-info-list (org-gantt-propagate-tags-down
 				   org-gantt-info-list nil))
-	(message "%s" (pp org-gantt-info-list))
+;	(message "%s" (pp org-gantt-info-list))
         (setq start-date-time
               (or start-date-time
                   (org-gantt-get-extreme-date-il
@@ -1114,6 +1154,8 @@ PARAMS determine several options of the gantt chart."
           "\\begin{ganttchart}[time slot format=isodate, "
           "vgrid="
           (org-gantt-get-vgrid-style start-date-time weekend-style workday-style)
+	  (when compress
+	    ", compress calendar")
           (when today-value
             (concat
              ", today="
@@ -1130,9 +1172,9 @@ PARAMS determine several options of the gantt chart."
           (format-time-string "%Y-%m-%d" end-date-time)
           "}\n"
           "\\gantttitlecalendar{"
-          (if titlecalendar
-              titlecalendar
-            "year, month=name, day")
+          (if compress
+	      compressed-titlecalendar
+	    titlecalendar)
           "}\\\\\n"
           (org-gantt-info-list-to-pgfgantt org-gantt-info-list start-date-time 1 show-progress)
           "\\end{ganttchart}"
