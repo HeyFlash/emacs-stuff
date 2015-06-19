@@ -63,6 +63,27 @@ Use :compressed-title-calendar to overwrite this value for individual gantt char
   :type '(string)
   :group 'org-gantt)
 
+(defcustom org-gantt-default-show-progress nil
+  "The default for showing a progress.
+nil means progress is not shown.
+always means progress is always shown (0, if no value exists).
+if-exists means progress is only shown if a value exists."
+  :type '(symbol)
+  :options '(nil if-exists always)
+  :group 'org-gantt)
+
+(defcustom org-gantt-default-progress-source 'cookie-clocksum
+  "The default source of the progress.
+Determines how the progress is calculated.
+clocksum means use clocksum values only.
+cookie means use progress-cookies only
+clocksum-cookie means prioritize clocksums, 
+but use progress cookie, if no clocksum exists.
+cookie-clocksum means prioritize cookie, 
+but use clocksum value, if no progress cookie exists."
+  :type '(symbol)
+  :options '(clocksum cookie clocksum-cookie cookie-clocksum))
+
 (defcustom org-gantt-default-incomplete-date-headlines 'inactive
   "The default treatment for headlines that have either deadline or schedule
 \(also computed\), but not both.
@@ -161,6 +182,9 @@ as a latex comment after each gantt bar."
 (defconst org-gantt-progress-prop :progress
   "What is used as the progress property in the constructed property list.")
 
+(defconst org-gantt-stats-cookie-prop :stats-cookie
+  "What is used as the statistics cooke, i.e. [X%], [X/Y]")
+
 (defconst org-gantt-tags-prop :tags
   "What is used as the tags property in the constructed property list.")
 
@@ -181,6 +205,13 @@ Is filled with local or default options.")
 (defun org-gantt-hours-per-day-time ()
   "Get hours per day as a time value."
   (seconds-to-time (* 3600 (org-gantt-hours-per-day))))
+
+(defun org-gantt-chomp (str)
+  "Chomp leading and tailing whitespace from STR."
+  (replace-regexp-in-string (rx (or (: bos (* (any " \t\n")))
+				    (: (* (any " \t\n")) eos)))
+			    ""
+			    str))
 
 (defun org-gantt-get-planning-time (element timestamp-type)
   "Get the time belonging to a first-order headline of the given ELEMENT.
@@ -292,12 +323,18 @@ the combined effort of subheadlines is used."
         (and use-subheadlines-effort
              (org-gantt-subheadlines-effort (cdr element) #'org-gantt-get-effort element-org-gantt-effort-prop)))))
 
+(defun org-gantt-statistics-value (title)
+  "Return the statistics value, if title contains it, else nil"
+  (org-element-map (org-element-contents title) 'statistics-cookie
+    (lambda (element) (org-element-property :value element))
+    nil t t))
+
 (defun org-gantt-create-gantt-info (element)
   "Create a gantt-info for ELEMENT.
 A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop org-gantt-effort-prop :subelements"
-  (message "TITLEtype: %s" (type-of (cdr (org-element-property :title element))))
-  (message "TITLEtype: %s" (cdr (org-element-property :title element)))
-  (list :name (org-element-property :raw-value element)
+;  (message "TITLEtype: %s" (type-of (cdr (org-element-property :title element))))
+;  (message "TITLE: %s" (car (org-element-contents (org-element-property :title element))))
+  (list :name (org-gantt-chomp (car (org-element-contents (org-element-property :title element))))
 	:ordered (org-element-property :ORDERED element)
         org-gantt-start-prop (org-gantt-get-start-time element)
         org-gantt-end-prop (org-gantt-get-end-time element)
@@ -307,6 +344,8 @@ A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop
 					(org-element-property :tags element)
 					(plist-get org-gantt-options :milestone-tags))
 				       (seconds-to-time 0)))
+	org-gantt-stats-cookie-prop (org-gantt-statistics-value
+				     (org-element-property :title element))
         org-gantt-clocksum-prop (org-gantt-effort-to-time (org-element-property :CLOCKSUM element) 24) ;clocksum is computed automatically with 24 hours per day, therefore we use 24.
         org-gantt-tags-prop (org-element-property :tags element)
 ;        (org-gantt-get-effort element :CLOCKSUM)
@@ -851,9 +890,22 @@ i.e. the first found style."
     (dolist (ct taglist ismember)
       (setq ismember (or ismember (member ct tags))))))
 
-(defun org-gantt-info-to-pgfgantt (gi default-date level &optional show-progress prefix ordered linked)
+(defun org-gantt-stats-cookie-to-progress (stats-cookie)
+  "Return a string between 0 and 100 representing the value of STATS-COOKIE.
+Return nil, if stats-cookie is not readable."
+  (let ((trimmed-cookie (substring stats-cookie 1 (- (length stats-cookie) 1))))
+    (cond ((string-match "%" trimmed-cookie)
+	   (substring trimmed-cookie 0 (- (length trimmed-cookie) 1)))
+	  ((string-match "/" trimmed-cookie)
+	   (let* ((listy (split-string trimmed-cookie "/"))
+		  (dividend (string-to-number (car listy)))
+		  (divisor (string-to-number (cadr listy)))
+		  (progress (* 100 (/ (float dividend) divisor))))
+	     (number-to-string progress)))
+	  (t nil))))
+
+(defun org-gantt-info-to-pgfgantt (gi default-date level &optional prefix ordered linked)
   "Create a pgfgantt string from gantt-info GI.
-Create progress information, if SHOW-PROGRESS is true.
 Prefix the created string with PREFIX.
 ORDERED determines whether the current headaline is ordered
 \(Required for correct linking of sub-subheadlines\).
@@ -866,6 +918,9 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
          (effort (plist-get gi org-gantt-effort-prop))
          (clocksum (plist-get gi org-gantt-clocksum-prop))
          (progress (plist-get gi org-gantt-progress-prop))
+	 (progress-str (and progress (number-to-string progress)))
+	 (stats-cookie (plist-get gi org-gantt-stats-cookie-prop))
+	 (stats-cookie-str (and stats-cookie (org-gantt-stats-cookie-to-progress stats-cookie)))
          (tags (plist-get gi org-gantt-tags-prop))
 	 (parent-tags (plist-get gi org-gantt-parent-tags-prop))
 	 (compress (plist-get org-gantt-options :compress))
@@ -887,6 +942,8 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
          (ignore-tags (plist-get org-gantt-options :ignore-tags))
          (use-tags (plist-get org-gantt-options :use-tags))
 	 (is-milestone (org-gantt-is-in-tags tags (plist-get org-gantt-options :milestone-tags)))
+	 (show-progress (plist-get org-gantt-options :show-progress))
+	 (progress-source (plist-get org-gantt-options :progress-source))
          (inactive-style)
          (ignore-this nil) ;ignore everything sub-this
 	 (ignore-only-this nil) ;ignore this, but maybe allow sub-this
@@ -923,13 +980,45 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 		 (if linked "\\ganttlinkedbar" "\\ganttbar")))
 	  "["
 	  (org-gantt-get-shifts up-start down-end compress)
-	  (when (or (equal show-progress t)
-		    (and (equal show-progress 'if-clocksum)
-			 clocksum))
-					;FIXME : use progress-prop here
+	  (cond
+	   ((equal show-progress 'always)
 	    (concat
 	     ", progress="
-	     (if progress (number-to-string progress) "0")))
+	     (cond
+	      ((equal progress-source 'clocksum) progress-str)
+	      ((equal progress-source 'cookie) stats-cookie-str)
+	      ((equal progress-source 'clocksum-cookie) (or progress-str stats-cookie-str))
+	      ((equal progress-source 'cookie-clocksum) (or stats-cookie-str progress-str))
+	      (t nil))))
+	   ((and (equal show-progress 'if-value)
+		 (equal progress-source 'clocksum)
+		 clocksum)
+	    (concat ",progress=" progress-str))
+	   ((and (equal show-progress 'if-value)
+		 (equal progress-source 'cookie)
+		 stats-cookie)
+	    (concat ",progress=" stats-cookie-str))
+	   ((and (equal show-progress 'if-value)
+		 (equal progress-source 'clocksum-cookie)
+		 (or clocksum stats-cookie))
+	    (concat ",progress=" (or progress-str stats-cookie-str)))
+	   ((and (equal show-progress 'if-value)
+		 (equal progress-source 'cookie-clocksum)
+		 (or stats-cookie clocksum))
+	    (concat ",progress=" (or stats-cookie-str progress-str)))
+	   (t nil))
+	  
+	  ;; (when (or (equal show-progress 'always)
+	  ;; 	    (and (equal show-progress 'if-exists)
+	  ;; 		 (or (and (equal progress-source 'clocksum)
+	  ;; 			  clocksum)
+	  ;; 		     (and (equal progress-source 'clocksum)))))
+	  ;; 				;FIXME : use progress-prop here
+	  ;;   (concat
+	  ;;    ", progress="
+	  ;;    (if progress (number-to-string progress)
+	  ;;      (if stats-cookie stats-cookie "NIX") "0")))
+	  
 	  (cond ((or (and (not up-start) (not down-end) (equal no-date-headlines 'inactive))
 		     (and (or (not up-start) (not down-end)) (equal incomplete-date-headlines 'inactive)))
 		 (if subelements
@@ -987,19 +1076,17 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 	  subelements
 	  default-date
           (+ level 1)
-	  show-progress
 	  (concat prefix "  ")
 	  (or ordered (plist-get gi :ordered))))))))
 
-(defun org-gantt-info-list-to-pgfgantt (data default-date level &optional show-progress prefix ordered)
+(defun org-gantt-info-list-to-pgfgantt (data default-date level &optional prefix ordered)
   "Return a pgfgantt string representing DATA.
-Create progress information, if SHOW-PROGRESS is true.
 Prefix each line of the created representation with PREFIX.
 Create correctly linked representation, if ORDERED is non-nil."
   (concat
-   (org-gantt-info-to-pgfgantt (car data) default-date level show-progress prefix ordered nil)
+   (org-gantt-info-to-pgfgantt (car data) default-date level prefix ordered nil)
    (mapconcat (lambda (datum)
-                (org-gantt-info-to-pgfgantt datum default-date level show-progress prefix ordered ordered))
+                (org-gantt-info-to-pgfgantt datum default-date level prefix ordered ordered))
               (cdr data)
               "")))
 
@@ -1066,7 +1153,6 @@ PARAMS determine several options of the gantt chart."
              (weekend-style (or (plist-get params :weekend-style) org-gantt-default-weekend-style))
              (workday-style (or (plist-get params :workday-style) org-gantt-default-workday-style))
              (today-value (plist-get params :today))
-             (show-progress (plist-get params :show-progress))
              (calc-progress (plist-get params :calc-progress))
              (id-subelements (plist-get params :use-id-subheadlines))
 	     (compress (plist-get params :compress))
@@ -1106,6 +1192,10 @@ PARAMS determine several options of the gantt chart."
                     (or (plist-get params :ignore-tags) org-gantt-default-ignore-tags)
 		    :milestone-tags
 		    (or (plist-get params :milestone-tags) org-gantt-default-milestone-tags)
+		    :show-progress
+		    (or (plist-get params :show-progress) org-gantt-default-show-progress)
+		    :progress-source
+		    (or (plist-get params :progress-source) org-gantt-default-progress-source)
 		    :compress compress
                     :maxlevel
                     (or (plist-get params :maxlevel) org-gantt-default-maxlevel)))
@@ -1176,7 +1266,7 @@ PARAMS determine several options of the gantt chart."
 	      compressed-titlecalendar
 	    titlecalendar)
           "}\\\\\n"
-          (org-gantt-info-list-to-pgfgantt org-gantt-info-list start-date-time 1 show-progress)
+          (org-gantt-info-list-to-pgfgantt org-gantt-info-list start-date-time 1)
           "\\end{ganttchart}"
           (when tikz-options
             "\n\\end{tikzpicture}")))))))
