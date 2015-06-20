@@ -39,6 +39,14 @@ Use :hours-per-day to overwrite this value for individual gantt charts."
   :type '(integer)
   :group 'org-gantt)
 
+(defcustom org-gantt-default-work-free-days '(0 6)
+  "The default days on which no work is done.
+Stored in a list of day-of-week numbers,
+starting with sunday = 0, ending with saturday = 6.
+Use :work-free-days to overwrite this value for individual gantt charts."
+  :type '(repeat integer)
+  :group 'org-gantt)
+
 (defcustom org-gantt-default-weekend-style "{black}"
   "The default style for the weekend lines.
 Use :weekend-style to overwrite this value for individual gantt charts."
@@ -190,6 +198,15 @@ as a latex comment after each gantt bar."
 
 (defconst org-gantt-parent-tags-prop :parent-tags
   "What is used as the property for propagated parent tags.")
+
+(defconst org-gantt-id-prop :id
+  "What is used as the the property for storing ids.")
+
+(defconst org-gantt-blocker-prop :blocker
+  "What is used as the property for the blocker property.")
+
+(defconst org-gantt-trigger-prop :trigger
+  "What is used as the property for the trigger property.")
 
 (defvar org-gant-hours-per-day-gv nil
   "Global variable for local hours-per-day.")
@@ -348,6 +365,9 @@ A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop
 				     (org-element-property :title element))
         org-gantt-clocksum-prop (org-gantt-effort-to-time (org-element-property :CLOCKSUM element) 24) ;clocksum is computed automatically with 24 hours per day, therefore we use 24.
         org-gantt-tags-prop (org-element-property :tags element)
+	org-gantt-id-prop (org-element-property :ID: element)
+	org-gantt-trigger-prop (org-element-property :TRIGGER element)
+	org-gantt-blocker-prop (org-element-property :BLOCKER element)
 ;        (org-gantt-get-effort element :CLOCKSUM)
         :subelements (org-gantt-crawl-headlines (cdr element))))
 
@@ -447,9 +467,9 @@ Optional HOURS-PER-DAY makes it possible to convert hour estimates into workdays
 
 (defun org-gantt-is-workday (time)
   "Return non-nil, iff TIME is a workday.  Currently does not consider holidays."
-  (let ((dow (string-to-number (format-time-string "%w" time))))
-    (and (/= dow 6)
-         (/= dow 0))))
+  (let ((dow (string-to-number (format-time-string "%w" time)))
+	(work-free-days (plist-get org-gantt-options :work-free-days)))
+    (not (member dow work-free-days))))
 
 (defun org-gantt-change-workdays (time ndays change-function)
   "Add or subtract NDAYS workdays to the given TIME.
@@ -911,6 +931,7 @@ ORDERED determines whether the current headaline is ordered
 \(Required for correct linking of sub-subheadlines\).
 Create a bar linked to the previous bar, if LINKED is non-nil."
   (let* ((subelements (plist-get gi :subelements))
+	 (id (plist-get gi org-gantt-id-prop))
          (start (plist-get gi org-gantt-start-prop))
          (end (plist-get gi org-gantt-end-prop))
          (up-start (org-gantt-upcast-starttime (plist-get gi org-gantt-start-prop)))
@@ -980,6 +1001,7 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 		 (if linked "\\ganttlinkedbar" "\\ganttbar")))
 	  "["
 	  (org-gantt-get-shifts up-start down-end compress)
+	  (when id (concat ", name=" id))
 	  (cond
 	   ((equal show-progress 'always)
 	    (concat
@@ -1171,7 +1193,9 @@ PARAMS determine several options of the gantt chart."
              (org-gantt-info-list (org-gantt-crawl-headlines parsed-data))
              (org-gantt-check-info-list nil))
 	(setq org-gantt-options
-	      (list :no-date-headlines
+	      (list :work-free-days
+		    (or (plist-get params :work-free-days) org-gantt-default-work-free-days)
+		    :no-date-headlines
 		    (or (plist-get params :no-date-headlines) org-gantt-default-no-date-headlines)
 		    :incomplete-date-headlines
 		    (or (plist-get params :incomplete-date-headlines)
@@ -1179,7 +1203,8 @@ PARAMS determine several options of the gantt chart."
                     :inactive-bar-style
                     (or (plist-get params :inactive-bar-style) org-gantt-default-inactive-bar-style)
                     :inactive-group-style
-                    (or (plist-get params :inactive-group-style) org-gantt-default-inactive-group-style)
+                    (or (plist-get params :inactive-group-style)
+			org-gantt-default-inactive-group-style)
                     :tags-bar-style
                     (or (plist-get params :tags-bar-style) org-gantt-default-tags-bar-style)
                     :tags-group-style

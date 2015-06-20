@@ -2,13 +2,15 @@
 #+LATEX_HEADER: \usepackage{lscape}
 #+LATEX_HEADER: \usepackage{graphicx}
 
-* Something
-** Else  [32%]
+* Something [1/4]
+** TODO Else  [32%]
    DEADLINE: <2015-06-22 Mo> SCHEDULED: <2015-05-29 Fr>
    :PROPERTIES:
    :CUSTOM_ID: Else123
    :END:      
-** don't bother
+** TODO don't bother
+** TODO one
+** DONE two
 * Ordered-Test :test:
    DEADLINE: <2015-05-26 Di>
   :PROPERTIES:
@@ -60,9 +62,11 @@
 \begin{tikzpicture}[scale=0.5, every node/.style={scale=0.5}]
 \begin{ganttchart}[time slot format=isodate, vgrid={*3{draw=blue!10, line width=1pt},*4{draw=blue!5, line width=.75pt}}, y unit title=.7cm, y unit chart=.9cm]{2015-05-15}{2015-06-22}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Something}{2015-05-29}{2015-06-22}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0,progress=25.0]{Something}{2015-05-29}{2015-06-22}\\
   \ganttbar[bar left shift=0.0, bar right shift=-0.0,progress=32]{Else}{2015-05-29}{2015-06-22}\\
   \ganttbar[bar left shift=0.0, bar right shift=0]{don't bother}{2015-05-15}{2015-05-15}\\
+  \ganttbar[bar left shift=0.0, bar right shift=0]{one}{2015-05-15}{2015-05-15}\\
+  \ganttbar[bar left shift=0.0, bar right shift=0]{two}{2015-05-15}{2015-05-15}\\
 \ganttgroup[group left shift=0.0, group right shift=-0.0,progress=67, group label font=\color{blue}]{Ordered-Test}{2015-05-22}{2015-05-26}\\
   \ganttbar[bar left shift=0.0, bar right shift=-0.0,progress=200, bar label font=\color{blue}]{Order1}{2015-05-22}{2015-05-22}\\
   \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0,progress=50, bar label font=\color{blue}]{Order2}{2015-05-25}{2015-05-26}\\
