@@ -392,13 +392,13 @@ It therefore becomes possible to create styles such as the following (shamelessl
 * COMMENT TODO-List
 ** DONE start and end time calculation (used to work)
 ** DONE progress calculation -> average of subprogress is incorrect.
-** Use [%] and [/] for progress calculation
+** DONE Use [%] and [/] for progress calculation
 ** DONE Correct computation of offsets for month-compressed charts
 ** DONE Correct Filtering by tag
 ** DONE Correct Highlighting by tag
 ** Use org-depend dependencies
 ** DONE Milestones
-
+** LINKED-TO
 * COMMENT Bugs
 ** If use-tags is used in a subelement of an ordered headline, a link from nowhere appears.
 ** Pulling in headlines from other files not working correctly.

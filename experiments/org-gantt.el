@@ -163,6 +163,11 @@ nil means print all."
   :type '(repeat string)
   :group 'org-gantt)
 
+(defcustom org-gantt-default-linked-to-property-keys '("linked-to" "LINKED-TO")
+  "A list of strings that are accepted as property keys for linked elements."
+  :type '(repeat string)
+  :group 'org-gantt)
+
 (defcustom org-gantt-default-maxlevel nil
   "The default maximum levels used for org-gantt charts. 
 nil means the complete tree is used."
@@ -207,6 +212,9 @@ as a latex comment after each gantt bar."
 
 (defconst org-gantt-trigger-prop :trigger
   "What is used as the property for the trigger property.")
+
+(defconst org-gantt-linked-to-prop :linked-to
+  "What is used as the property for the linked-to elements")
 
 (defvar org-gant-hours-per-day-gv nil
   "Global variable for local hours-per-day.")
@@ -346,6 +354,16 @@ the combined effort of subheadlines is used."
     (lambda (element) (org-element-property :value element))
     nil t t))
 
+(defun org-gantt-get-flattened-properties (element property-key-list)
+  "Return the properties in ELEMENT flattened into one list.
+Return properties as defined by any key in PROPERTY-KEY-LIST."
+  (let ((property-list nil))
+    (dolist (key property-key-list property-list)
+      (when (org-element-property key element)
+	(setq property-list
+	      (append (split-string (org-element-property key element) "," t t)
+		      property-list))))))
+
 (defun org-gantt-create-gantt-info (element)
   "Create a gantt-info for ELEMENT.
 A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop org-gantt-effort-prop :subelements"
@@ -366,6 +384,8 @@ A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop
         org-gantt-clocksum-prop (org-gantt-effort-to-time (org-element-property :CLOCKSUM element) 24) ;clocksum is computed automatically with 24 hours per day, therefore we use 24.
         org-gantt-tags-prop (org-element-property :tags element)
 	org-gantt-id-prop (org-element-property :ID: element)
+	org-gantt-linked-to-prop (org-gantt-get-flattened-properties
+				  element (plist-get org-gantt-options :linked-to-property-keys))
 	org-gantt-trigger-prop (org-element-property :TRIGGER element)
 	org-gantt-blocker-prop (org-element-property :BLOCKER element)
 ;        (org-gantt-get-effort element :CLOCKSUM)
@@ -625,6 +645,35 @@ from the function itself."
       (setq newlist (append newlist (list replacement)))
       (setq listitem (cdr listitem)))
     newlist))
+
+(defun org-gantt-find-headline-with-id (headline-list id)
+  "Return the first headline in HEADLINE-LIST with id ID.
+Is applied to subheadlines (depth-first)."
+  (let* ((headline (car headline-list))
+	 (cur-id (plist-get org-gantt-id-prop))
+	 (subheadlines (plist-get :subelements headline)))
+    (if (equal cur-id id)
+	headline
+      (or (org-gantt-find-headline-with-id subheadlines id)
+	  (org-gantt-find-headline-with-id (cdr headline-list))))))
+
+(defun org-gantt-propagate-linked-to-timestamps (headline-list)
+  "Propagate the end-times for linked-to headlines in HEADLINE-LIST.
+Propagates endtime of a headline as start line of its linked-to headlines,
+for all that do not already have start times.
+FIXME this is not working."
+  (let ((linked-to nil)
+	(listitem headline-list)
+	(headline nil)
+	(replacement nil)
+	(newlist nil)
+	(linkhash (make-hash-table)))
+    (while listitem
+      (setq headline (car listitem))
+      (setq replacement headline)
+      (setq linked-to (plist-get replacement org-gantt-linked-to-prop))
+      (dolist (lt linked-to)
+	(puthash lt (plist-get org-gantt-start-prop headline) linkhash)))))
 
 (defun org-gantt-calculate-ds-from-effort (headline-list)
   "Calculate deadline or schedule from effort in headlines of HEADLINE-LIST.
@@ -1217,6 +1266,9 @@ PARAMS determine several options of the gantt chart."
                     (or (plist-get params :ignore-tags) org-gantt-default-ignore-tags)
 		    :milestone-tags
 		    (or (plist-get params :milestone-tags) org-gantt-default-milestone-tags)
+		    :linked-to-property-keys
+		    (or (plist-get params :linked-to-property-keys)
+			org-gantt-default-linked-to-property-keys)
 		    :show-progress
 		    (or (plist-get params :show-progress) org-gantt-default-show-progress)
 		    :progress-source
