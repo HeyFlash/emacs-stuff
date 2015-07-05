@@ -57,13 +57,13 @@ Updating the dynamic block will result in the following gantt chart:
 #+BEGIN: org-gantt-chart :id "deadlines-schedules" 
 \begin{ganttchart}[time slot format=isodate, vgrid={*2{dashed},*3{black},*2{dashed}}]{2015-05-20}{2015-05-30}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{org-gantt-todo}{2015-05-20}{2015-05-30}\\%2015-05-20,00:00 -- 0d 01:00 -- 2015-05-30,08:00
-  \ganttgroup[group left shift=0.0, group right shift=-0.0]{Important stuff}{2015-05-25}{2015-05-30}\\%2015-05-25,00:00 --  -- 2015-05-30,08:00
-    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\%2015-05-25,00:00 --  -- 2015-05-28,08:00
-    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\%2015-05-27,00:00 --  -- 2015-05-30,08:00
-  \ganttgroup[group left shift=0.0, group right shift=-0.0]{Other stuff}{2015-05-20}{2015-05-28}\\%2015-05-20,00:00 --  -- 2015-05-28,08:00
-    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add features}{2015-05-22}{2015-05-26}\\%2015-05-22,00:00 --  -- 2015-05-26,08:00
-    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add missing docstrings}{2015-05-24}{2015-05-27}\\%2015-05-24,00:00 --  -- 2015-05-27,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{org-gantt-todo}{2015-05-20}{2015-05-30}\\
+  \ganttgroup[group left shift=0.0, group right shift=-0.0]{Important stuff}{2015-05-25}{2015-05-30}\\
+    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\
+    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\
+  \ganttgroup[group left shift=0.0, group right shift=-0.0]{Other stuff}{2015-05-20}{2015-05-28}\\
+    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add features}{2015-05-22}{2015-05-26}\\
+    \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add missing docstrings}{2015-05-24}{2015-05-27}\\
 \end{ganttchart}
 #+END:
 
@@ -82,12 +82,12 @@ creates the following gantt chart:
 #+BEGIN: org-gantt-chart :id "deadlines-schedules" :use-id-subheadlines t :start-date "<2015-05-15>" :end-date "<2015-05-31>"
 \begin{ganttchart}[time slot format=isodate, vgrid={*3{black},*4{dashed}}]{2015-05-15}{2015-05-31}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Important stuff}{2015-05-25}{2015-05-30}\\%2015-05-25,00:00 -- 0d 01:00 -- 2015-05-30,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\%2015-05-25,00:00 --  -- 2015-05-28,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\%2015-05-27,00:00 --  -- 2015-05-30,08:00
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Other stuff}{2015-05-20}{2015-05-28}\\%2015-05-20,00:00 -- 0d 01:00 -- 2015-05-28,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add features}{2015-05-22}{2015-05-26}\\%2015-05-22,00:00 --  -- 2015-05-26,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add missing docstrings}{2015-05-24}{2015-05-27}\\%2015-05-24,00:00 --  -- 2015-05-27,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Important stuff}{2015-05-25}{2015-05-30}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Write manual}{2015-05-25}{2015-05-28}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Fix bugs}{2015-05-27}{2015-05-30}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Other stuff}{2015-05-20}{2015-05-28}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add features}{2015-05-22}{2015-05-26}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Add missing docstrings}{2015-05-24}{2015-05-27}\\
 \end{ganttchart}
 #+END
 
@@ -135,12 +135,12 @@ The resulting gantt chart:
 #+BEGIN: org-gantt-chart :id "effort" :use-id-subheadlines t :start-date "2015-05-15" :end-date "2015-05-31"
 \begin{ganttchart}[time slot format=isodate, vgrid={*3{black},*4{dashed}}]{2015-05-15}{2015-05-31}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Frame}{2015-05-19}{2015-05-21}\\%2015-05-19,00:00 -- 1d 09:00 -- 2015-05-21,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Weld Frame}{2015-05-19}{2015-05-20}\\%2015-05-19,00:00 -- 0d 17:00 -- 2015-05-20,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Paint Frame}{2015-05-20}{2015-05-21}\\%2015-05-20,00:00 -- 0d 17:00 -- 2015-05-21,08:00
-\ganttgroup[group left shift=0.0, group right shift=-0.0]{Other Parts}{2015-05-22}{2015-05-27}\\%2015-05-22,00:00 -- 2d 01:00 -- 2015-05-27,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.625]{Assemble Parts}{2015-05-22}{2015-05-26}\\%2015-05-22,00:00 -- 0d 20:00 -- 2015-05-26,03:00
-  \ganttbar[bar left shift=0.375, bar right shift=-0.0]{Fix Parts to Frame}{2015-05-22}{2015-05-27}\\%2015-05-22,03:00 -- 1d 06:00 -- 2015-05-27,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Frame}{2015-05-19}{2015-05-21}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Weld Frame}{2015-05-19}{2015-05-20}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Paint Frame}{2015-05-20}{2015-05-21}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0]{Other Parts}{2015-05-22}{2015-05-27}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.625]{Assemble Parts}{2015-05-22}{2015-05-26}\\
+  \ganttbar[bar left shift=0.375, bar right shift=-0.0]{Fix Parts to Frame}{2015-05-22}{2015-05-27}\\
 \end{ganttchart}
 #+END
 
@@ -188,11 +188,11 @@ Results in the following gantt chart:
 #+BEGIN: org-gantt-chart :id "ordered-space" :use-id-subheadlines t :start-date "<2015-06-20 Sa>" :end-date "<2015-07-10 Fr>"
 \begin{ganttchart}[time slot format=isodate, vgrid={*2{black},*4{dashed},*1{black}}]{2015-06-20}{2015-07-10}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.5]{Fly to the Moon}{2015-06-22}{2015-07-07}\\%2015-06-22,00:00 -- 3d 21:00 -- 2015-07-07,04:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Buy Rocket Parts}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -- 2015-06-26,08:00
-  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0]{Assemble Rocket}{2015-06-29}{2015-07-01}\\%2015-06-26,08:00 -- 1d 01:00 -- 2015-07-01,08:00
-  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.5]{Start Rocket}{2015-07-02}{2015-07-02}\\%2015-07-01,08:00 -- 0d 05:00 -- 2015-07-02,04:00
-  \ganttlinkedbar[bar left shift=0.5, bar right shift=-0.5]{Space Flight}{2015-07-02}{2015-07-07}\\%2015-07-02,04:00 -- 1d 01:00 -- 2015-07-07,04:00
+\ganttgroup[group left shift=0.0, group right shift=-0.5]{Fly to the Moon}{2015-06-22}{2015-07-07}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0]{Buy Rocket Parts}{2015-06-22}{2015-06-26}\\
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0]{Assemble Rocket}{2015-06-29}{2015-07-01}\\
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.5]{Start Rocket}{2015-07-02}{2015-07-02}\\
+  \ganttlinkedbar[bar left shift=0.5, bar right shift=-0.5]{Space Flight}{2015-07-02}{2015-07-07}\\
 \end{ganttchart}
 #+END
 
@@ -230,12 +230,12 @@ To show progress, use the parameter ~:show-progress~. Setting it to ~t~ will sho
 
 Creates the following gantt chart:
 
-#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum 
+#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-exists 
 \begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-06-22}{2015-07-10}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0, progress=67]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\%2015-06-22,00:00 -- 5d 01:00 -(5d 01:00)-  -- 2015-07-10,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -(3d 17:00)-  -- 2015-06-26,08:00
-  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0, progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\%2015-06-26,08:00 -- 3d 09:00 -(1d 09:00)-  -- 2015-07-10,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0,progress=67]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0,progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0,progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\
 \end{ganttchart}
 #+END
 
@@ -250,12 +250,12 @@ This chart demonstrates that the progress calculation of org-gantt does not use 
 
 Creates the following gantt chart:
 
-#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum :calc-progress use-larger-100 
+#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-exists :calc-progress use-larger-100 
 \begin{ganttchart}[time slot format=isodate, vgrid={*4{dashed},*3{black}}]{2015-06-22}{2015-07-10}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0, progress=100]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\%2015-06-22,00:00 -- 5d 01:00 -(5d 01:00)-  -- 2015-07-10,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -(3d 17:00)-  -- 2015-06-26,08:00
-  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0, progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\%2015-06-26,08:00 -- 3d 09:00 -(1d 09:00)-  -- 2015-07-10,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0,progress=100]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0,progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0,progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\
 \end{ganttchart}
 #+END
 
@@ -266,12 +266,12 @@ The exception to this are the pgf-gantt parameters ~time slot format~ and ~vgrid
 
 It therefore becomes possible to create styles such as the following (shamelessly stolen from the pgf gantt manual) - look at the source in org-gantt-manual.org for the full list of parameters:
 
-#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-clocksum :workday-style "white" :weekend-style "black!10" :parameters "y unit title=0.4cm, y unit chart=0.5cm, title/.append style={draw=none, fill=RoyalBlue!50!black}, title label font=\\sffamily\\bfseries\\color{white}, title label node/.append style={below=-1.6ex}, title left shift=.05, title right shift=-.05, title height=1, bar/.append style={draw=none, fill=OliveGreen!75}, bar height=.6, bar label font=\\normalsize\\color{black!50}, group right shift=0, group top shift=.6, group height=.3, group peaks height=.2, bar incomplete/.append style={fill=Maroon}, canvas/.style={shape=rectangle, fill=black!5, draw=RoyalBlue!50!black, very thick}"
+#+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-exists :workday-style "white" :weekend-style "black!10" :parameters "y unit title=0.4cm, y unit chart=0.5cm, title/.append style={draw=none, fill=RoyalBlue!50!black}, title label font=\\sffamily\\bfseries\\color{white}, title label node/.append style={below=-1.6ex}, title left shift=.05, title right shift=-.05, title height=1, bar/.append style={draw=none, fill=OliveGreen!75}, bar height=.6, bar label font=\\normalsize\\color{black!50}, group right shift=0, group top shift=.6, group height=.3, group peaks height=.2, bar incomplete/.append style={fill=Maroon}, canvas/.style={shape=rectangle, fill=black!5, draw=RoyalBlue!50!black, very thick}"
 \begin{ganttchart}[time slot format=isodate, vgrid={*4white,*3black!10}, y unit title=0.4cm, y unit chart=0.5cm, title/.append style={draw=none, fill=RoyalBlue!50!black}, title label font=\sffamily\bfseries\color{white}, title label node/.append style={below=-1.6ex}, title left shift=.05, title right shift=-.05, title height=1, bar/.append style={draw=none, fill=OliveGreen!75}, bar height=.6, bar label font=\normalsize\color{black!50}, group right shift=0, group top shift=.6, group height=.3, group peaks height=.2, bar incomplete/.append style={fill=Maroon}, canvas/.style={shape=rectangle, fill=black!5, draw=RoyalBlue!50!black, very thick}]{2015-06-22}{2015-07-10}
 \gantttitlecalendar{year, month=name, day}\\
-\ganttgroup[group left shift=0.0, group right shift=-0.0, progress=67]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\%2015-06-22,00:00 -- 5d 01:00 -(5d 01:00)-  -- 2015-07-10,08:00
-  \ganttbar[bar left shift=0.0, bar right shift=-0.0, progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\%2015-06-22,00:00 -- 1d 17:00 -(3d 17:00)-  -- 2015-06-26,08:00
-  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0, progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\%2015-06-26,08:00 -- 3d 09:00 -(1d 09:00)-  -- 2015-07-10,08:00
+\ganttgroup[group left shift=0.0, group right shift=-0.0,progress=67]{Fly to Alpha Centauri}{2015-06-22}{2015-07-10}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0,progress=200]{Assemble Hyperdrive}{2015-06-22}{2015-06-26}\\
+  \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0,progress=50]{Interstellar Flight}{2015-06-29}{2015-07-10}\\
 \end{ganttchart}
 #+END
 

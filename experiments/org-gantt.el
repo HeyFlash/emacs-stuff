@@ -163,7 +163,7 @@ nil means print all."
   :type '(repeat string)
   :group 'org-gantt)
 
-(defcustom org-gantt-default-linked-to-property-keys '("linked-to" "LINKED-TO")
+(defcustom org-gantt-default-linked-to-property-keys '(:LINKED-TO)
   "A list of strings that are accepted as property keys for linked elements."
   :type '(repeat string)
   :group 'org-gantt)
@@ -223,6 +223,16 @@ as a latex comment after each gantt bar."
   "Global variable that keeps a plist of the current options.
 Is filled with local or default options.")
 
+(defvar *org-gantt-changed-in-propagation* nil
+  "Global variable for checking if something was changed during propagation.")
+
+(defvar *org-gantt-id-counter* 0
+  "Global variable for creating ids.")
+
+(defvar *org-gantt-link-hash* nil
+  "Global variable for storing manually given links.
+Is used to create the manual links between elements at the end.")
+
 (defun org-gantt-hours-per-day ()
   "Get the hours per day."
   org-gantt-hours-per-day-gv)
@@ -237,6 +247,36 @@ Is filled with local or default options.")
 				    (: (* (any " \t\n")) eos)))
 			    ""
 			    str))
+
+(defun org-gantt-gethash (key table &optional dflt)
+  "Works just as gethash, but works if hashtable is nil.
+Look up KEY in TABLE and return its associated value.
+If KEY is not found, or TABLE is nil, return DFLT which defaults to nil."
+  (if table
+      (gethash key table dflt)
+    dflt))
+
+(defun org-gantt-hashtable-equal (table1 table2)
+  "Return true, iff table1 and table2 are hash tables with the same contents."
+  (and (= (hash-table-count table1)
+          (hash-table-count table2))
+       (catch 'flag (maphash (lambda (x y)
+                               (or (org-gantt-equal (gethash x table2) y)
+                                   (throw 'flag nil)))
+                             table11)
+              (throw 'flag t))))
+
+(defun org-gantt-equal (item1 item2)
+  "Returns true, iff item1 is equal to item2, including hash tables"
+  (if (and (hash-table-p item1) (hash-table-p item2))
+      (org-gantt-hashtable-equal item1 item2)
+    (equal item1 item2)))
+
+(defun org-gantt-info-list-equal (il1 il2)
+  "Returns true iff IL1 is equal to IL2, including hash tables."
+  (or (and (not il1) (not il2))
+      (and (org-gantt-equal (car il1) (car il2))
+	   (org-gantt-info-list-equal (cdr il1) (cdr il2)))))
 
 (defun org-gantt-get-planning-time (element timestamp-type)
   "Get the time belonging to a first-order headline of the given ELEMENT.
@@ -357,39 +397,64 @@ the combined effort of subheadlines is used."
 (defun org-gantt-get-flattened-properties (element property-key-list)
   "Return the properties in ELEMENT flattened into one list.
 Return properties as defined by any key in PROPERTY-KEY-LIST."
+;  (message "PROP-KEY-LIST %s" property-key-list)
+;  (message "ELEMENT %s" (pp element))
   (let ((property-list nil))
     (dolist (key property-key-list property-list)
       (when (org-element-property key element)
 	(setq property-list
-	      (append (split-string (org-element-property key element) "," t t)
+	      (append (split-string (org-element-property key element) "," t)
 		      property-list))))))
+
+(defun org-gantt-create-id ()
+  "Create a unique id."
+  (setq *org-gantt-id-counter*
+	(+ 1 *org-gantt-id-counter*))
+  (concat "uniqueid"
+	  (number-to-string *org-gantt-id-counter*)))
 
 (defun org-gantt-create-gantt-info (element)
   "Create a gantt-info for ELEMENT.
 A gantt-info is a plist containing :name org-gantt-start-prop org-gantt-end-prop org-gantt-effort-prop :subelements"
 ;  (message "TITLEtype: %s" (type-of (cdr (org-element-property :title element))))
-;  (message "TITLE: %s" (car (org-element-contents (org-element-property :title element))))
-  (list :name (org-gantt-chomp (car (org-element-contents (org-element-property :title element))))
-	:ordered (org-element-property :ORDERED element)
-        org-gantt-start-prop (org-gantt-get-start-time element)
-        org-gantt-end-prop (org-gantt-get-end-time element)
-        org-gantt-effort-prop (or (org-gantt-get-effort
-				   element :EFFORT)
-				  (and (org-gantt-is-in-tags
-					(org-element-property :tags element)
-					(plist-get org-gantt-options :milestone-tags))
-				       (seconds-to-time 0)))
-	org-gantt-stats-cookie-prop (org-gantt-statistics-value
-				     (org-element-property :title element))
-        org-gantt-clocksum-prop (org-gantt-effort-to-time (org-element-property :CLOCKSUM element) 24) ;clocksum is computed automatically with 24 hours per day, therefore we use 24.
-        org-gantt-tags-prop (org-element-property :tags element)
-	org-gantt-id-prop (org-element-property :ID: element)
-	org-gantt-linked-to-prop (org-gantt-get-flattened-properties
-				  element (plist-get org-gantt-options :linked-to-property-keys))
-	org-gantt-trigger-prop (org-element-property :TRIGGER element)
-	org-gantt-blocker-prop (org-element-property :BLOCKER element)
-;        (org-gantt-get-effort element :CLOCKSUM)
-        :subelements (org-gantt-crawl-headlines (cdr element))))
+					;  (message "TITLE: %s" (car (org-element-contents (org-element-property :title element))))
+  (let ((gantt-info-hash (make-hash-table)))
+    (puthash 
+     :name (org-element-property :raw-value element)
+     gantt-info-hash)
+    (puthash :ordered (org-element-property :ORDERED element) gantt-info-hash)
+    (puthash org-gantt-start-prop (org-gantt-get-start-time element) gantt-info-hash)
+    (puthash org-gantt-end-prop (org-gantt-get-end-time element) gantt-info-hash)
+    (puthash org-gantt-effort-prop (or (org-gantt-get-effort
+					 element :EFFORT)
+					(and (org-gantt-is-in-tags
+					      (org-element-property :tags element)
+					      (plist-get org-gantt-options :milestone-tags))
+					     (seconds-to-time 0)))
+	      gantt-info-hash)
+    (puthash org-gantt-stats-cookie-prop (org-gantt-statistics-value
+					  (org-element-property :title element))
+	     gantt-info-hash)
+    (puthash org-gantt-clocksum-prop (org-gantt-effort-to-time (org-element-property :CLOCKSUM element) 24) gantt-info-hash) ;clocksum is computed automatically with 24 hours per day, therefore we use 24.
+    (puthash org-gantt-tags-prop (org-element-property :tags element) gantt-info-hash)
+    (puthash org-gantt-id-prop (or (org-element-property :ID element)
+				   (org-gantt-create-id))
+	     gantt-info-hash)
+    (when (org-gantt-get-flattened-properties
+	   element (plist-get org-gantt-options
+			      :linked-to-property-keys))
+      (message "FLATTENED: %s" (org-gantt-get-flattened-properties
+				       element (plist-get org-gantt-options
+							  :linked-to-property-keys))))
+    (puthash org-gantt-linked-to-prop (org-gantt-get-flattened-properties
+				       element (plist-get org-gantt-options
+							  :linked-to-property-keys))
+	     gantt-info-hash)
+  (puthash org-gantt-trigger-prop (org-element-property :TRIGGER element) gantt-info-hash)
+  (puthash org-gantt-blocker-prop (org-element-property :BLOCKER element) gantt-info-hash)
+					;        (org-gantt-get-effort element :CLOCKSUM)
+  (puthash :subelements (org-gantt-crawl-headlines (cdr element)) gantt-info-hash)
+  gantt-info-hash))
 
 (defun org-gantt-crawl-headlines (data)
   "Crawl the parsed DATA and return a gantt-info-list from the headlines."
@@ -409,7 +474,7 @@ Returns the first element of the list `sort'ed according to TIME-COMPARER."
        (cons (funcall time-getter info)
              (cons
               (org-gantt-get-extreme-date-il
-               (plist-get info-list :subelements) time-getter time-comparer)
+               (gethash :subelements info) time-getter time-comparer)
               reslist))))
     (car (sort reslist time-comparer))))
 
@@ -609,152 +674,174 @@ STARTTIME is the time where the next bar starts."
 (defun org-gantt-propagate-order-timestamps (headline-list &optional is-ordered parent-start parent-end)
   "Propagate the times of headlines in HEADLINE-LIST that are ordered.
 Recursively apply to subheadlines.
-IS-ORDERED whether the current subheadlines are ordered.
+IS-ORDERED whether th(car headline-list) e current subheadlins are ordered.
 PARENT-START start time of the parent of the current subheadlines.
 PARENT-END end time of the parent of the current subheadlines.
 The optional parameters ore only required for the recursive calls
 from the function itself."
-  (let ((next-start (or (plist-get (car headline-list) org-gantt-start-prop) parent-start))
+  (let ((next-start (or (org-gantt-gethash org-gantt-start-prop (car headline-list)) parent-start))
         (listitem headline-list)
         (headline nil)
-        (replacement nil)
-        (newlist nil))
+	(is-changed nil))
     (while listitem
       (setq headline (car listitem))
-      (setq replacement headline)
       (when is-ordered
-        (setq replacement
-              (plist-put replacement org-gantt-start-prop
-                         (or (plist-get replacement org-gantt-start-prop) next-start)))
-        (setq next-start (org-gantt-get-next-time (plist-get replacement org-gantt-end-prop)))
-        (setq replacement
-              (plist-put replacement org-gantt-end-prop
-                         (or (plist-get replacement org-gantt-end-prop)
-                             (if (cdr listitem)
-                                 (org-gantt-get-prev-time
-                                  (plist-get (cadr listitem) org-gantt-start-prop))
-                               parent-end)))))
-      (when (plist-get replacement :subelements)
-        (setq replacement
-              (plist-put replacement :subelements
-                         (org-gantt-propagate-order-timestamps
-                          (plist-get replacement :subelements)
-                          (or is-ordered (plist-get replacement :ordered))
-                          (plist-get replacement org-gantt-start-prop)
-                          (plist-get replacement org-gantt-end-prop)))))
-      (setq newlist (append newlist (list replacement)))
+	(setq is-changed
+	      (or is-changed
+		  (and next-start (not (org-gantt-gethash org-gantt-start-prop headline)))))
+        (puthash org-gantt-start-prop
+		 (or (org-gantt-gethash org-gantt-start-prop headline) next-start)
+		 headline)
+        (setq next-start (org-gantt-get-next-time (gethash org-gantt-end-prop headline)))
+	(setq is-changed
+	      (or is-changed
+		  (and (if (cdr listitem)
+			   (org-gantt-get-prev-time
+			    (gethash org-gantt-start-prop (cadr listitem)))
+			 parent-end)
+		       (not (org-gantt-gethash org-gantt-end-prop headline)))))
+        (puthash org-gantt-end-prop
+		 (or (org-gantt-gethash org-gantt-end-prop headline)
+		     (if (cdr listitem)
+			 (org-gantt-get-prev-time
+			  (gethash org-gantt-start-prop (cadr listitem)))
+		       parent-end))
+		 headline))
+      (setq is-changed
+	    (or 
+	     (org-gantt-propagate-order-timestamps
+	      (gethash :subelements headline)
+	      (or is-ordered (gethash :ordered headline))
+	      (gethash org-gantt-start-prop headline)
+	      (gethash org-gantt-end-prop headline))
+	     is-changed))
       (setq listitem (cdr listitem)))
-    newlist))
+    is-changed))
 
 (defun org-gantt-find-headline-with-id (headline-list id)
   "Return the first headline in HEADLINE-LIST with id ID.
 Is applied to subheadlines (depth-first)."
-  (let* ((headline (car headline-list))
-	 (cur-id (plist-get org-gantt-id-prop))
-	 (subheadlines (plist-get :subelements headline)))
-    (if (equal cur-id id)
-	headline
-      (or (org-gantt-find-headline-with-id subheadlines id)
-	  (org-gantt-find-headline-with-id (cdr headline-list))))))
+  (and
+   headline-list
+   (let* ((headline (car headline-list))
+	  (cur-id (gethash org-gantt-id-prop headline))
+	  (subheadlines (gethash :subelements headline)))
+     (if (equal cur-id id)
+	 headline
+       (or (org-gantt-find-headline-with-id subheadlines id)
+	   (org-gantt-find-headline-with-id (cdr headline-list) id))))))
 
-(defun org-gantt-propagate-linked-to-timestamps (headline-list)
+(defun org-gantt-propagate-linked-to-timestamps (headline-list complete-headline-list)
   "Propagate the end-times for linked-to headlines in HEADLINE-LIST.
 Propagates endtime of a headline as start line of its linked-to headlines,
 for all that do not already have start times.
 FIXME this is not working."
-  (let ((linked-to nil)
-	(listitem headline-list)
-	(headline nil)
-	(replacement nil)
-	(newlist nil)
-	(linkhash (make-hash-table)))
-    (while listitem
-      (setq headline (car listitem))
-      (setq replacement headline)
-      (setq linked-to (plist-get replacement org-gantt-linked-to-prop))
-      (dolist (lt linked-to)
-	(puthash lt (plist-get org-gantt-start-prop headline) linkhash)))))
+  (dolist (headline headline-list headline-list)
+    (let ((ids (gethash org-gantt-linked-to-prop headline)))
+      (when ids
+	(message "FOUN ids %s" ids))
+      (dolist (id ids)
+	(let ((found-headline
+	       (org-gantt-find-headline-with-id complete-headline-list id)))
+	  (message "FOUND headline %s" found-headline)
+	  (when (and found-headline
+		     (not (gethash org-gantt-start-prop found-headline))
+		     (gethash org-gantt-end-prop headline))
+	    (setq *org-gantt-changed-in-propagation* t)
+	    (message "PROPagatin linked-to %s" found-headline)
+	    (puthash
+	     (gethash org-gantt-id-prop headline)
+	     (gethash org-gantt-id-prop found-headline)
+	     *org-gantt-link-hash*)
+	    (puthash
+	     org-gantt-start-prop
+	     (org-gantt-get-next-time 
+	      (gethash org-gantt-end-prop headline))
+	     found-headline))))
+      (org-gantt-propagate-linked-to-timestamps
+       (gethash :subelements headline) complete-headline-list))))
 
 (defun org-gantt-calculate-ds-from-effort (headline-list)
   "Calculate deadline or schedule from effort in headlines of HEADLINE-LIST.
 If a deadline or schedule conflicts with the effort, keep value and warn.
 Recursively apply to subheadlines."
-  (let ((newlist nil))
-    (dolist (headline headline-list newlist)
-      (let ((replacement headline)
-            (start (plist-get headline org-gantt-start-prop))
-            (end (plist-get headline org-gantt-end-prop))
-            (effort (plist-get headline org-gantt-effort-prop)))
-        (cond ((and start end effort)
-               effort) ;;FIXME: Calculate if start, end, effort conflict and warn.
-              ((and start effort)
-               (setq replacement
-                     (plist-put replacement org-gantt-end-prop
-				(org-gantt-change-worktime
-                                 start effort
-                                 #'time-add
-                                 #'org-gantt-day-start
-                                 #'org-gantt-day-end))))
-              ((and effort end)
-               (setq replacement
-                     (plist-put replacement org-gantt-start-prop
-				(org-gantt-change-worktime
-                                 end effort
-                                 #'time-subtract
-                                 #'org-gantt-day-end
-                                 #'org-gantt-day-start)))))
-        (when (plist-get replacement :subelements)
-          (setq replacement
-                (plist-put replacement :subelements
-                           (org-gantt-calculate-ds-from-effort
-                            (plist-get replacement :subelements)))))
-        (setq newlist (append newlist (list replacement)))))))
+  (let ((is-changed nil))
+    (dolist (headline headline-list is-changed)
+      (let ((start (gethash org-gantt-start-prop headline))
+	    (end (gethash  org-gantt-end-prop headline))
+	    (effort (gethash org-gantt-effort-prop headline)))
+	(cond ((and start end effort)
+	       effort) ;;FIXME: Calculate if start, end, effort conflict and warn.
+	      ((and start effort)
+	       (puthash org-gantt-end-prop
+			(org-gantt-change-worktime
+			 start effort
+			 #'time-add
+			 #'org-gantt-day-start
+			 #'org-gantt-day-end)
+			headline)
+	       (setq is-changed (or is-changed (gethash org-gantt-end-prop headline))))
+	      ((and effort end)
+	       (puthash org-gantt-start-prop
+			(org-gantt-change-worktime
+			 end effort
+			 #'time-subtract
+			 #'org-gantt-day-end
+			 #'org-gantt-day-start)
+			headline)
+	       (setq is-changed (or is-changed (gethash org-gantt-start-prop headline)))))
+	(setq is-changed
+	      (or (org-gantt-calculate-ds-from-effort
+		   (gethash :subelements headline))
+		  is-changed))))))
 
 (defun org-gantt-first-subheadline-start (headline)
   "Gets the start time of the first subelement of HEADLINE (or its subelement)."
   (and headline
-       (or (plist-get (car (plist-get headline :subelements)) org-gantt-start-prop)
-           (org-gantt-get-subheadline-start (car (plist-get headline :subelements)) t))))
+       (let ((first-sub (car (gethash :subelements headline))))
+	 (or (org-gantt-gethash org-gantt-start-prop first-sub)
+	     (org-gantt-get-subheadline-start first-sub t)))))
 
 (defun org-gantt-last-subheadline-end (headline)
   "Gets the end time of the last subelement of HEADLINE (or its subelement)."
   (and headline
-       (or (plist-get (car (last (plist-get headline :subelements))) org-gantt-end-prop)
-           (org-gantt-get-subheadline-end (car (last (plist-get headline :subelements))) t))))
+       (let ((last-sub (car (last (gethash :subelements headline)))))
+	 (or (org-gantt-gethash org-gantt-end-prop last-sub)
+	     (org-gantt-get-subheadline-end last-sub t)))))
 
 (defun org-gantt-get-subheadline-start (headline ordered)
   "Gets the start time of HEADLINE.
 The start time is the start property iff it exists.
 It is the start of the first subheadline, if ORDERED is true.
 Otherwise it is the first start of all the subheadlines or their subheadlines."
-  (or (plist-get headline org-gantt-start-prop)
+  (or (org-gantt-gethash org-gantt-start-prop headline)
       (if ordered
           (org-gantt-first-subheadline-start headline)
         (org-gantt-subheadline-extreme
          headline
          #'org-gantt-time-less-p
          (lambda (hl) (org-gantt-get-subheadline-start hl ordered))
-         (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))))
+         (lambda (hl) (org-gantt-propagate-ds-up (gethash :subelements hl) ordered))))))
 
 (defun org-gantt-get-subheadline-end (headline ordered)
   "Gets the end time of HEADLINE.
 The end time is the end property iff it exists.
 It is the end of the last subheadline, if ORDERED is true.
 Otherwise it is the last end of all the subheadlines or their subheadlines."
-  (or (plist-get headline org-gantt-end-prop)
+  (or (org-gantt-gethash org-gantt-end-prop headline)
       (if ordered
           (org-gantt-last-subheadline-end headline)
         (org-gantt-subheadline-extreme
          headline
          #'org-gantt-time-larger-p
          (lambda (hl) (org-gantt-get-subheadline-end hl ordered))
-         (lambda (hl) (org-gantt-propagate-ds-up (plist-get hl :subelements) ordered))))))
+         (lambda (hl) (org-gantt-propagate-ds-up (gethash :subelements hl) ordered))))))
 
 
 (defun org-gantt-get-subheadline-effort-sum (headline)
   "Get the sum of efforts of the subheadlines of HEADLINE."
-  (or (plist-get headline org-gantt-effort-prop)
-      (let ((subelements (plist-get headline :subelements))
+  (or (org-gantt-gethash org-gantt-effort-prop headline)
+      (let ((subelements (gethash :subelements headline))
             (effort-sum (seconds-to-time 0)))
 ;        (org-gantt-propagate-effort-up subelements)
         (dolist (ch subelements effort-sum)
@@ -770,8 +857,8 @@ subprogresses with an effort > 100 are used completely,
 otherwise, a subprogress is used as having a max effort of 100.
 If PRIORITIZE-SUBSUMS is non-nil, progress-summations are taken
 from subheadlines, even if a headline has a progress."
-  (let ((subelements (plist-get headline :subelements))
-        (progress (plist-get headline org-gantt-progress-prop))
+  (let ((subelements (gethash :subelements headline))
+        (progress (gethash org-gantt-progress-prop headline))
         (progress-sum nil)
         (count 0))
     (or (and (not prioritize-subsums)
@@ -783,7 +870,7 @@ from subheadlines, even if a headline has a progress."
                                         ;        (org-gantt-propagate-summation-up subelements)
         (dolist (ch subelements (and progress-sum count (round (/ progress-sum count))))
           (let ((subsum (org-gantt-get-subheadline-progress-summation ch calc-progress prioritize-subsums))
-                (subeffort (time-to-seconds (plist-get ch :effort))))
+                (subeffort (time-to-seconds (gethash :effort ch))))
             (setq count (+ count subeffort))
 ;            (message "ps: %s, ss: %s" progress-sum subsum)
             (setq progress-sum
@@ -802,19 +889,22 @@ from subheadlines, even if a headline has a progress."
   "Propagate start and end time from subelements.
 HEADLINE-LIST the list of headlines where the propagation takes place.
 ORDERED determines whether the current list is ordered in recursive calls."
-  (let ((newlist nil))
-    (dolist (headline headline-list newlist)
-      (let ((replacement headline)
-            (cur-ordered (or ordered (plist-get headline :ordered)))
-            (start (plist-get headline org-gantt-start-prop))
-            (end (plist-get headline org-gantt-end-prop)))
-        (setq replacement
-              (plist-put replacement org-gantt-start-prop
-                         (org-gantt-get-subheadline-start replacement cur-ordered)))
-        (setq replacement
-              (plist-put replacement org-gantt-end-prop
-                         (org-gantt-get-subheadline-end replacement cur-ordered)))
-        (setq newlist (append newlist (list replacement)))))))
+  (dolist (headline headline-list headline-list)
+    (let* ((cur-ordered (or ordered (gethash :ordered headline)))
+	   (start (gethash org-gantt-start-prop headline))
+	   (end (gethash org-gantt-end-prop headline))
+	   (subheadline-start (org-gantt-get-subheadline-start headline cur-ordered))
+	   (subheadline-end (org-gantt-get-subheadline-end headline cur-ordered)))
+      (puthash org-gantt-start-prop
+	       subheadline-start
+	       headline)
+      (puthash org-gantt-end-prop
+	       subheadline-end
+	       headline)
+      (setq *org-gantt-changed-in-propagation*
+	    (or *org-gantt-changed-in-propagation*
+		(not (equal start subheadline-start))
+		(not (equal end subheadline-end)))))))
 
 (defun org-gantt-propagate-summation-up (headline-list property subsum-getter &optional prioritize-subsums)
   "Propagate summed efforts from subelements in HEADLINE-LIST.
@@ -822,53 +912,34 @@ Get the efforts via PROPERTY.
 When the current headline does not have PROPERTY, or
 PRIORITIZE-SUBSUMS is non-nil, use SUBSUM-GETTER to get
 the summed effort from subelements."
-  (let ((newlist nil))
-    (dolist (headline headline-list newlist)
-      (let ((replacement headline)
-            (effort (plist-get headline property)))
-        (when (or prioritize-subsums (not effort))
-          (setq replacement
-                (plist-put replacement property
-                           (funcall subsum-getter replacement))))
-        (setq newlist (append newlist (list replacement)))))))
-
-(defun org-gantt-propagate-tags-into (headline parent-tags)
-  "Propagate the TAGS into HEADLINE and recursively call 
-propagation for subelements."
-  (plist-put 
-   (plist-put headline org-gantt-parent-tags-prop parent-tags)
-   :subelements
-   (org-gantt-propagate-tags-down
-    (plist-get headline :subelements)
-    (append parent-tags (plist-get headline org-gantt-tags-prop)))))
+  (dolist (headline headline-list headline-list)
+    (let ((effort (gethash property headline)))
+      (when (or prioritize-subsums (not effort))
+	(puthash  property
+		  (funcall subsum-getter headline)
+		  headline)))))
 
 (defun org-gantt-propagate-tags-down (headline-list parent-tags)
   "Propagate the tags of each headline into :parent-tag-prop of each subheadline
-(and their subheadlines)."
-  (let ((newlist nil))
-    (dolist (headline headline-list newlist)
-      (let ((replacement (org-gantt-propagate-tags-into headline parent-tags))
-            (tags (plist-get headline org-gantt-tags-prop)))
-        (setq newlist (append newlist (list replacement)))))))
-
+and their subheadlines."
+  (dolist (headline headline-list headline-list)
+    (puthash org-gantt-parent-tags-prop parent-tags headline)
+    (org-gantt-propagate-tags-down
+     (gethash :subelements headline)
+     (append parent-tags (gethash org-gantt-tags-prop headline)))))
 
 (defun org-gantt-compute-progress (headline-list)
   "Compute the progress (if possible) for the headlines in HEADLINE-LIST.
 Is recursively applied to subelements."
-  (let ((newlist nil))
-    (dolist (headline headline-list newlist)
-      (let ((replacement headline)
-            (effort (plist-get headline org-gantt-effort-prop))
-            (clocksum (plist-get headline org-gantt-clocksum-prop))
-            (subelements (plist-get headline :subelements)))
-        (when (and effort clocksum)
-          (setq replacement
-                (plist-put replacement org-gantt-progress-prop
-                           (org-gantt-get-completion-percent effort clocksum))))
-        (setq replacement
-              (plist-put replacement :subelements
-                         (org-gantt-compute-progress subelements)))
-        (setq newlist (append newlist (list replacement)))))))
+  (dolist (headline headline-list headline-list)
+    (let ((effort (gethash org-gantt-effort-prop headline))
+	  (clocksum (gethash org-gantt-clocksum-prop headline))
+	  (subelements (gethash :subelements headline)))
+      (when (and effort clocksum)
+	(puthash org-gantt-progress-prop
+		 (org-gantt-get-completion-percent effort clocksum)
+		 headline))
+      (org-gantt-compute-progress subelements))))
 
 (defun org-gantt-downcast-endtime (endtime)
   "Downcast ENDTIME to the previous day, if sensible.
@@ -979,176 +1050,177 @@ Prefix the created string with PREFIX.
 ORDERED determines whether the current headaline is ordered
 \(Required for correct linking of sub-subheadlines\).
 Create a bar linked to the previous bar, if LINKED is non-nil."
-  (let* ((subelements (plist-get gi :subelements))
-	 (id (plist-get gi org-gantt-id-prop))
-         (start (plist-get gi org-gantt-start-prop))
-         (end (plist-get gi org-gantt-end-prop))
-         (up-start (org-gantt-upcast-starttime (plist-get gi org-gantt-start-prop)))
-         (down-end (org-gantt-downcast-endtime (plist-get gi org-gantt-end-prop)))
-         (effort (plist-get gi org-gantt-effort-prop))
-         (clocksum (plist-get gi org-gantt-clocksum-prop))
-         (progress (plist-get gi org-gantt-progress-prop))
-	 (progress-str (and progress (number-to-string progress)))
-	 (stats-cookie (plist-get gi org-gantt-stats-cookie-prop))
-	 (stats-cookie-str (and stats-cookie (org-gantt-stats-cookie-to-progress stats-cookie)))
-         (tags (plist-get gi org-gantt-tags-prop))
-	 (parent-tags (plist-get gi org-gantt-parent-tags-prop))
-	 (compress (plist-get org-gantt-options :compress))
-         (no-date-headlines (plist-get org-gantt-options :no-date-headlines))
-         (incomplete-date-headlines (plist-get org-gantt-options :incomplete-date-headlines))
-         (inactive-bar-style (plist-get org-gantt-options :inactive-bar-style))
-         (inactive-group-style (plist-get org-gantt-options :inactive-group-style))
-         (maxlevel (plist-get org-gantt-options :maxlevel))
-         (tags-bar-style (plist-get org-gantt-options :tags-bar-style))
-         (tags-group-style (plist-get org-gantt-options :tags-group-style))
-	 (tag-style-effect (plist-get org-gantt-options :tag-style-effect))
-	 (tag-style-to-subheadlines (equal tag-style-effect 'subheadlines))
-         (ctag-group-style (or (org-gantt-get-tags-style tags tags-group-style)
+  (when gi
+    (let* ((subelements (gethash :subelements gi))
+	   (id (gethash org-gantt-id-prop gi))
+	   (start (gethash org-gantt-start-prop gi))
+	   (end (gethash org-gantt-end-prop gi))
+	   (up-start (org-gantt-upcast-starttime (gethash org-gantt-start-prop gi)))
+	   (down-end (org-gantt-downcast-endtime (gethash org-gantt-end-prop gi)))
+	   (effort (gethash org-gantt-effort-prop gi))
+	   (clocksum (gethash org-gantt-clocksum-prop gi))
+	   (progress (gethash org-gantt-progress-prop gi))
+	   (progress-str (and progress (number-to-string progress)))
+	   (stats-cookie (gethash org-gantt-stats-cookie-prop gi))
+	   (stats-cookie-str (and stats-cookie (org-gantt-stats-cookie-to-progress stats-cookie)))
+	   (tags (gethash org-gantt-tags-prop gi))
+	   (parent-tags (gethash org-gantt-parent-tags-prop gi))
+	   (compress (plist-get org-gantt-options :compress))
+	   (no-date-headlines (plist-get org-gantt-options :no-date-headlines))
+	   (incomplete-date-headlines (plist-get org-gantt-options :incomplete-date-headlines))
+	   (inactive-bar-style (plist-get org-gantt-options :inactive-bar-style))
+	   (inactive-group-style (plist-get org-gantt-options :inactive-group-style))
+	   (maxlevel (plist-get org-gantt-options :maxlevel))
+	   (tags-bar-style (plist-get org-gantt-options :tags-bar-style))
+	   (tags-group-style (plist-get org-gantt-options :tags-group-style))
+	   (tag-style-effect (plist-get org-gantt-options :tag-style-effect))
+	   (tag-style-to-subheadlines (equal tag-style-effect 'subheadlines))
+	   (ctag-group-style (or (org-gantt-get-tags-style tags tags-group-style)
+				 (and tag-style-to-subheadlines
+				      (org-gantt-get-tags-style parent-tags tags-group-style))))
+	   (ctag-bar-style (or (org-gantt-get-tags-style tags tags-bar-style)
 			       (and tag-style-to-subheadlines
-				    (org-gantt-get-tags-style parent-tags tags-group-style))))
-         (ctag-bar-style (or (org-gantt-get-tags-style tags tags-bar-style)
-			     (and tag-style-to-subheadlines
-				  (org-gantt-get-tags-style parent-tags tags-bar-style))))
-         (ignore-tags (plist-get org-gantt-options :ignore-tags))
-         (use-tags (plist-get org-gantt-options :use-tags))
-	 (is-milestone (org-gantt-is-in-tags tags (plist-get org-gantt-options :milestone-tags)))
-	 (show-progress (plist-get org-gantt-options :show-progress))
-	 (progress-source (plist-get org-gantt-options :progress-source))
-         (inactive-style)
-         (ignore-this nil) ;ignore everything sub-this
-	 (ignore-only-this nil) ;ignore this, but maybe allow sub-this
-	 )
-    (cond ((and (not up-start) (not down-end))
-	   (when (equal no-date-headlines 'ignore)
-	     (setq ignore-this t))
-	   (setq up-start default-date)
-	   (setq down-end default-date))
-	  ((not down-end)
-	   (when (equal incomplete-date-headlines 'ignore)
-	     (setq ignore-this t))
-	   (setq down-end up-start))
-	  ((not up-start)
-	   (when (equal incomplete-date-headlines 'ignore)
-	     (setq ignore-this t))
-	   (setq up-start down-end)))
-    (when (and ignore-tags (org-gantt-is-in-tags tags ignore-tags))
-      (setq ignore-this t))
-    (when (and use-tags
-	       (not (org-gantt-is-in-tags tags use-tags))
-	       (not (org-gantt-is-in-tags parent-tags use-tags)))
-      (setq ignore-only-this t))
-    (unless ignore-this
-      (concat
-       (unless ignore-only-this
-	 (concat
-	  prefix
-	  (cond (is-milestone
-		 (if linked "\\ganttlinkedmilestone" "\\ganttmilestone"))
-		(subelements
-		 (if linked "\\ganttlinkedgroup" "\\ganttgroup"))
-		(t
-		 (if linked "\\ganttlinkedbar" "\\ganttbar")))
-	  "["
-	  (org-gantt-get-shifts up-start down-end compress)
-	  (when id (concat ", name=" id))
-	  (cond
-	   ((equal show-progress 'always)
-	    (concat
-	     ", progress="
-	     (cond
-	      ((equal progress-source 'clocksum) progress-str)
-	      ((equal progress-source 'cookie) stats-cookie-str)
-	      ((equal progress-source 'clocksum-cookie) (or progress-str stats-cookie-str))
-	      ((equal progress-source 'cookie-clocksum) (or stats-cookie-str progress-str))
-	      (t nil))))
-	   ((and (equal show-progress 'if-value)
-		 (equal progress-source 'clocksum)
-		 clocksum)
-	    (concat ",progress=" progress-str))
-	   ((and (equal show-progress 'if-value)
-		 (equal progress-source 'cookie)
-		 stats-cookie)
-	    (concat ",progress=" stats-cookie-str))
-	   ((and (equal show-progress 'if-value)
-		 (equal progress-source 'clocksum-cookie)
-		 (or clocksum stats-cookie))
-	    (concat ",progress=" (or progress-str stats-cookie-str)))
-	   ((and (equal show-progress 'if-value)
-		 (equal progress-source 'cookie-clocksum)
-		 (or stats-cookie clocksum))
-	    (concat ",progress=" (or stats-cookie-str progress-str)))
-	   (t nil))
-	  
-	  ;; (when (or (equal show-progress 'always)
-	  ;; 	    (and (equal show-progress 'if-exists)
-	  ;; 		 (or (and (equal progress-source 'clocksum)
-	  ;; 			  clocksum)
-	  ;; 		     (and (equal progress-source 'clocksum)))))
-	  ;; 				;FIXME : use progress-prop here
-	  ;;   (concat
-	  ;;    ", progress="
-	  ;;    (if progress (number-to-string progress)
-	  ;;      (if stats-cookie stats-cookie "NIX") "0")))
-	  
-	  (cond ((or (and (not up-start) (not down-end) (equal no-date-headlines 'inactive))
-		     (and (or (not up-start) (not down-end)) (equal incomplete-date-headlines 'inactive)))
-		 (if subelements
-		     (concat ", " inactive-group-style)
-		   (concat ", " inactive-bar-style)))
-		((and subelements ctag-group-style)
-		 (concat ", " ctag-group-style))
-		((and (not subelements) ctag-bar-style)
-		 (concat ", " ctag-bar-style)))
-	  "]"
-	  "{" 
-	  (apply #'concat (split-string (plist-get gi :name) "%" t))
-	  "}"
-	  "{"
-	  (if is-milestone
-	      (format-time-string "%Y-%m-%d" start)
-	    (if up-start
-		(format-time-string "%Y-%m-%d" up-start)
-	      (if (not (equal no-date-headlines 'ignore))
-		  (format-time-string "%Y-%m-%d" default-date))))
-	  "}"
-	  (unless is-milestone
-	    (concat
-	     "{"
-	     (if down-end
-		 (format-time-string "%Y-%m-%d" down-end)
-	       (if (not (equal no-date-headlines 'ignore))
-		   (format-time-string "%Y-%m-%d" default-date)))
-	     "}"))
-	  "\\\\"
-	  (when org-gantt-output-debug-dates
-	    (concat
-	     "%"
-	     (when start
-	       (format-time-string "%Y-%m-%d,%H:%M" start))
-	     " -- "
-	     (when effort
-	       (concat
-		(number-to-string (floor (time-to-number-of-days effort)))
-		"d "
-		(format-time-string "%H:%M" effort)))
-	     (when clocksum
-	       (concat
-		" -("
-		(number-to-string (floor (time-to-number-of-days clocksum)))
-		"d "
-		(format-time-string "%H:%M" effort)
-		")- "))
-	     " -- "
-	     (when end
-	       (format-time-string "%Y-%m-%d,%H:%M" end))))
-	  "\n"))
-       (when (and subelements (or (not maxlevel) (< level maxlevel)))
-	 (org-gantt-info-list-to-pgfgantt
-	  subelements
-	  default-date
-          (+ level 1)
-	  (concat prefix "  ")
-	  (or ordered (plist-get gi :ordered))))))))
+				    (org-gantt-get-tags-style parent-tags tags-bar-style))))
+	   (ignore-tags (plist-get org-gantt-options :ignore-tags))
+	   (use-tags (plist-get org-gantt-options :use-tags))
+	   (is-milestone (org-gantt-is-in-tags tags (plist-get org-gantt-options :milestone-tags)))
+	   (show-progress (plist-get org-gantt-options :show-progress))
+	   (progress-source (plist-get org-gantt-options :progress-source))
+	   (inactive-style)
+	   (ignore-this nil) ;ignore everything sub-this
+	   (ignore-only-this nil) ;ignore this, but maybe allow sub-this
+	   )
+      (cond ((and (not up-start) (not down-end))
+	     (when (equal no-date-headlines 'ignore)
+	       (setq ignore-this t))
+	     (setq up-start default-date)
+	     (setq down-end default-date))
+	    ((not down-end)
+	     (when (equal incomplete-date-headlines 'ignore)
+	       (setq ignore-this t))
+	     (setq down-end up-start))
+	    ((not up-start)
+	     (when (equal incomplete-date-headlines 'ignore)
+	       (setq ignore-this t))
+	     (setq up-start down-end)))
+      (when (and ignore-tags (org-gantt-is-in-tags tags ignore-tags))
+	(setq ignore-this t))
+      (when (and use-tags
+		 (not (org-gantt-is-in-tags tags use-tags))
+		 (not (org-gantt-is-in-tags parent-tags use-tags)))
+	(setq ignore-only-this t))
+      (unless ignore-this
+	(concat
+	 (unless ignore-only-this
+	   (concat
+	    prefix
+	    (cond (is-milestone
+		   (if linked "\\ganttlinkedmilestone" "\\ganttmilestone"))
+		  (subelements
+		   (if linked "\\ganttlinkedgroup" "\\ganttgroup"))
+		  (t
+		   (if linked "\\ganttlinkedbar" "\\ganttbar")))
+	    "["
+	    (org-gantt-get-shifts up-start down-end compress)
+	    (when id (concat ", name=" id))
+	    (cond
+	     ((equal show-progress 'always)
+	      (concat
+	       ", progress="
+	       (cond
+		((equal progress-source 'clocksum) progress-str)
+		((equal progress-source 'cookie) stats-cookie-str)
+		((equal progress-source 'clocksum-cookie) (or progress-str stats-cookie-str))
+		((equal progress-source 'cookie-clocksum) (or stats-cookie-str progress-str))
+		(t nil))))
+	     ((and (equal show-progress 'if-exists)
+		   (equal progress-source 'clocksum)
+		   clocksum)
+	      (concat ",progress=" progress-str))
+	     ((and (equal show-progress 'if-exists)
+		   (equal progress-source 'cookie)
+		   stats-cookie)
+	      (concat ",progress=" stats-cookie-str))
+	     ((and (equal show-progress 'if-exists)
+		   (equal progress-source 'clocksum-cookie)
+		   (or clocksum stats-cookie))
+	      (concat ",progress=" (or progress-str stats-cookie-str)))
+	     ((and (equal show-progress 'if-exists)
+		   (equal progress-source 'cookie-clocksum)
+		   (or stats-cookie clocksum))
+	      (concat ",progress=" (or stats-cookie-str progress-str)))
+	     (t nil))
+	    
+	    ;; (when (or (equal show-progress 'always)
+	    ;; 	    (and (equal show-progress 'if-exists)
+	    ;; 		 (or (and (equal progress-source 'clocksum)
+	    ;; 			  clocksum)
+	    ;; 		     (and (equal progress-source 'clocksum)))))
+	    ;; 				;FIXME : use progress-prop here
+	    ;;   (concat
+	    ;;    ", progress="
+	    ;;    (if progress (number-to-string progress)
+	    ;;      (if stats-cookie stats-cookie "NIX") "0")))
+	    
+	    (cond ((or (and (not up-start) (not down-end) (equal no-date-headlines 'inactive))
+		       (and (or (not up-start) (not down-end)) (equal incomplete-date-headlines 'inactive)))
+		   (if subelements
+		       (concat ", " inactive-group-style)
+		     (concat ", " inactive-bar-style)))
+		  ((and subelements ctag-group-style)
+		   (concat ", " ctag-group-style))
+		  ((and (not subelements) ctag-bar-style)
+		   (concat ", " ctag-bar-style)))
+	    "]"
+	    "{" 
+	    (apply #'concat (split-string (gethash :name gi) "%" t))
+	    "}"
+	    "{"
+	    (if is-milestone
+		(format-time-string "%Y-%m-%d" start)
+	      (if up-start
+		  (format-time-string "%Y-%m-%d" up-start)
+		(if (not (equal no-date-headlines 'ignore))
+		    (format-time-string "%Y-%m-%d" default-date))))
+	    "}"
+	    (unless is-milestone
+	      (concat
+	       "{"
+	       (if down-end
+		   (format-time-string "%Y-%m-%d" down-end)
+		 (if (not (equal no-date-headlines 'ignore))
+		     (format-time-string "%Y-%m-%d" default-date)))
+	       "}"))
+	    "\\\\"
+	    (when org-gantt-output-debug-dates
+	      (concat
+	       "%"
+	       (when start
+		 (format-time-string "%Y-%m-%d,%H:%M" start))
+	       " -- "
+	       (when effort
+		 (concat
+		  (number-to-string (floor (time-to-number-of-days effort)))
+		  "d "
+		  (format-time-string "%H:%M" effort)))
+	       (when clocksum
+		 (concat
+		  " -("
+		  (number-to-string (floor (time-to-number-of-days clocksum)))
+		  "d "
+		  (format-time-string "%H:%M" effort)
+		  ")- "))
+	       " -- "
+	       (when end
+		 (format-time-string "%Y-%m-%d,%H:%M" end))))
+	    "\n"))
+	 (when (and subelements (or (not maxlevel) (< level maxlevel)))
+	   (org-gantt-info-list-to-pgfgantt
+	    subelements
+	    default-date
+	    (+ level 1)
+	    (concat prefix "  ")
+	    (or ordered (gethash :ordered gi)))))))))
 
 (defun org-gantt-info-list-to-pgfgantt (data default-date level &optional prefix ordered)
   "Return a pgfgantt string representing DATA.
@@ -1160,6 +1232,16 @@ Create correctly linked representation, if ORDERED is non-nil."
                 (org-gantt-info-to-pgfgantt datum default-date level prefix ordered ordered))
               (cdr data)
               "")))
+
+(defun org-gantt-linkhash-to-pgfgantt (linkhash)
+  "Return a pgfgantt string representing the links in LINKHASH."
+  (let ((retstring ""))
+    (maphash
+     (lambda (from to)
+       (setq retstring
+	     (concat retstring "\\ganttlink{" from "}{" to "}\n")))
+     linkhash)
+    retstring))
 
 (defun org-gantt-days-to-vgrid-style (weekend workday weekend-style workday-style)
   "Return a vgrid-style for either WEEKEND or WORKDAY (whichever is non-nil).
@@ -1192,6 +1274,9 @@ Use WEEKEND-STYLE and WORKDAY-STYLE as templates for the style."
 (defun org-dblock-write:org-gantt-chart (params)
   "The function that is called for updating gantt chart code.
 PARAMS determine several options of the gantt chart."
+  (setq *org-gantt-changed-in-propagation* t)
+  (setq *org-gantt-id-counter* 0)
+  (setq *org-gantt-link-hash* (make-hash-table))
   (let (id idpos id-as-string view-file view-pos)
     (when (setq id (plist-get params :id))
       (setq id-as-string (cond ((numberp id) (number-to-string id))
@@ -1276,40 +1361,44 @@ PARAMS determine several options of the gantt chart."
 		    :compress compress
                     :maxlevel
                     (or (plist-get params :maxlevel) org-gantt-default-maxlevel)))
+	(message "INFO_LIST: %s" org-gantt-info-list)
         (when (not parsed-data)
           (error "Could not find element with :ID: %s" id))
-        (while (not (equal org-gantt-info-list org-gantt-check-info-list))
-          (setq org-gantt-check-info-list (copy-tree org-gantt-info-list))
-          (setq org-gantt-info-list
-                (org-gantt-propagate-ds-up
-                 (org-gantt-propagate-order-timestamps
-                  (org-gantt-calculate-ds-from-effort org-gantt-info-list)))))
-;        (message "%s" org-gantt-info-list)
-        (setq org-gantt-info-list (org-gantt-propagate-summation-up
-                                   org-gantt-info-list
-                                   org-gantt-effort-prop
-                                   #'org-gantt-get-subheadline-effort-sum))
-        (setq org-gantt-info-list (org-gantt-compute-progress org-gantt-info-list))
+        (while *org-gantt-changed-in-propagation*
+	  (setq *org-gantt-changed-in-propagation* nil)
+	  (setq *org-gantt-changed-in-propagation*
+		(org-gantt-calculate-ds-from-effort org-gantt-info-list))
+	  (setq *org-gantt-changed-in-propagation*
+		(or (org-gantt-propagate-order-timestamps org-gantt-info-list)
+		    *org-gantt-changed-in-propagation*))
+	  (org-gantt-propagate-ds-up org-gantt-info-list)
+	  (org-gantt-propagate-linked-to-timestamps
+	   org-gantt-info-list org-gantt-info-list))
+;        (message "IL2 %s" (pp org-gantt-info-list))
+        (org-gantt-propagate-summation-up
+	 org-gantt-info-list
+	 org-gantt-effort-prop
+	 #'org-gantt-get-subheadline-effort-sum)
+        (org-gantt-compute-progress org-gantt-info-list)
 ;        (message "%s" (pp org-gantt-info-list))
-        (setq org-gantt-info-list (org-gantt-propagate-summation-up
-                                   org-gantt-info-list
-                                   org-gantt-progress-prop
-                                   (lambda (hl) (org-gantt-get-subheadline-progress-summation hl calc-progress t))
-                                   t))
-	(setq org-gantt-info-list (org-gantt-propagate-tags-down
-				   org-gantt-info-list nil))
+        (org-gantt-propagate-summation-up
+	 org-gantt-info-list
+	 org-gantt-progress-prop
+	 (lambda (hl) (org-gantt-get-subheadline-progress-summation hl calc-progress t))
+	 t)
+	(org-gantt-propagate-tags-down org-gantt-info-list nil)
 ;	(message "%s" (pp org-gantt-info-list))
         (setq start-date-time
               (or start-date-time
                   (org-gantt-get-extreme-date-il
                    org-gantt-info-list
-                   (lambda (info) (plist-get info org-gantt-start-prop))
+                   (lambda (info) (gethash org-gantt-start-prop info))
                    #'org-gantt-time-less-p)))
         (setq end-date-time
               (or end-date-time
                   (org-gantt-get-extreme-date-il
                    org-gantt-info-list
-                   (lambda (info) (plist-get info org-gantt-end-prop))
+                   (lambda (info) (gethash org-gantt-end-prop info))
                    #'org-gantt-time-larger-p)))
         (insert
          (concat
@@ -1344,6 +1433,7 @@ PARAMS determine several options of the gantt chart."
 	    titlecalendar)
           "}\\\\\n"
           (org-gantt-info-list-to-pgfgantt org-gantt-info-list start-date-time 1)
+	  (org-gantt-linkhash-to-pgfgantt *org-gantt-link-hash*)
           "\\end{ganttchart}"
           (when tikz-options
             "\n\\end{tikzpicture}")))))))
