@@ -103,9 +103,10 @@ but use clocksum value, if no progress cookie exists."
   :group 'org-gantt)
 
 (defcustom org-gantt-default-no-date-headlines 'inactive
-  "The default treatment for headlines that have neither deadline or schedule.
+  "The default treatment for headlines that have neither deadline nor schedule.
 'keep will place the headline at the first day, with a length of 0.
-'inactive will place the headline, but distinguish it via inactive-style.
+'inactive will place the headline, but distinguish it via 
+inactive-bar-style and inactive-group-style.
 'ignore will not place the headline onto the chart."
   :type '(symbol)
   :options '(keep inactive ignore)
@@ -737,12 +738,13 @@ Propagates endtime of a headline as start line of its linked-to headlines,
 for all that do not already have start times.
 FIXME this is not working."
   (dolist (headline headline-list headline-list)
-    (let ((ids (gethash org-gantt-linked-to-prop headline)))
-      (when ids
-	(message "FOUN ids %s" ids))
-      (dolist (id ids)
+    (let ((linked-ids (gethash org-gantt-linked-to-prop headline))
+	  (orig-id (gethash org-gantt-id-prop headline)))
+      (when linked-ids
+	(message "FOUN ids %s" linked-ids))
+      (dolist (linked-id linked-ids)
 	(let ((found-headline
-	       (org-gantt-find-headline-with-id complete-headline-list id)))
+	       (org-gantt-find-headline-with-id complete-headline-list linked-id)))
 	  (message "FOUND headline %s" found-headline)
 	  (when (and found-headline
 		     (not (gethash org-gantt-start-prop found-headline))
@@ -750,8 +752,8 @@ FIXME this is not working."
 	    (setq *org-gantt-changed-in-propagation* t)
 	    (message "PROPagatin linked-to %s" found-headline)
 	    (puthash
-	     (gethash org-gantt-id-prop headline)
-	     (gethash org-gantt-id-prop found-headline)
+	     orig-id
+	     (append (gethash orig-id *org-gantt-link-hash*) (list linked-id))
 	     *org-gantt-link-hash*)
 	    (puthash
 	     org-gantt-start-prop
@@ -1235,11 +1237,13 @@ Create correctly linked representation, if ORDERED is non-nil."
 
 (defun org-gantt-linkhash-to-pgfgantt (linkhash)
   "Return a pgfgantt string representing the links in LINKHASH."
+  (message "LINKED-HASH: %s" linkhash)
   (let ((retstring ""))
     (maphash
-     (lambda (from to)
-       (setq retstring
-	     (concat retstring "\\ganttlink{" from "}{" to "}\n")))
+     (lambda (from tolist)
+       (dolist (to tolist)
+	 (setq retstring
+	       (concat retstring "\\ganttlink{" from "}{" to "}\n"))))
      linkhash)
     retstring))
 

@@ -11,7 +11,7 @@
 
 * Introduction
 org-gantt defines a custom dynamic block for org mode that can create gantt charts from org files, using headlines and their schedules, deadlines, effort and clock values.
-The latex package [[https://www.ctan.org/pkg/pgfgantt][pgfgantt]] is used to create the gantt charts, thus they are only visible on export into a pdf file.
+The latex package [[https://www.ctan.org/pkg/pgfgantt][pgfgantt]] is used to create the gantt charts, thus they are only visible on export into a pdf file. This manual is about org-gantt. Many options for creating the gantt charts that are specific to pgfgantt are explained in its manual an not further explained here.
 
 * Installation and usage
 Open org-gantt.el and run eval-buffer.
@@ -27,6 +27,8 @@ The org-gantt block is delimited by the following lines:
 #+END:
 #+END_SRC
 Using these delimiters without any parameters will create a custom dynamic block spanning the entire current file. As this document is written in org mode, all examples will use an :id parameter to limit the gantt chart to a specific subtree.
+
+Customizable variables can be set in the standard form of org custom dynamic block variables, i.e. with ~:variable-name variable value~ directly after the ~#+BEGIN: org-gantt chart~. Those variables will only affect the block they are set. In almost all cases it is possible to customize the default value of those variables by customizing the emacs variable ~org-gantt-default-variable-name~, which can be found in the customize-group ~org-gantt~. For the remainder of this manual, the possibility of setting the default value is not explicitly mentioned for each variable. An overview of customizable variables can be found in section [[Parameters]].
 
 ** Deadlines and Schedules
 The simplest way of creating a gantt chart is to use hardcoded deadlines and schedules, which are created via /org-deadline/ (C-c C-d) and /org-schedule/ (C-c C-s)
@@ -146,6 +148,7 @@ The resulting gantt chart:
 
 
 Note that org-gantt correctly displays efforts that are not full days. Additionally, weekend days are not counted as workdays. When calculating deadlines and schedules, weekend days are spanned in addition to the estimated effort.
+Days that are counted as work free (weekends by default) can be set by the variable ~:work-free-days~, which is a list integers between 0 (sunday) 6 (saturday).
 
 *** Effort Estimates and Ordered Headlines
 Headlines can be marked as [[http://orgmode.org/manual/TODO-dependencies.html][ordered]], meaning that a subtask can only be started once the previous subtask has been finished. Due to this dependency even more deadlines and schedules can be calculated automatically: If every subtask has an effort estimate, a single deadline or schedule is enough to calculate all other times. The deadline or schedule can be attached to the supertask or to any of the subtasks.
@@ -198,9 +201,28 @@ Results in the following gantt chart:
 
 This chart demonstrates that the start of a follow-up task is shifted to the following Monday, if the previous task ends exactly at the start of the weekend. Additionally, it demonstrates how follow-up days start on the same day, if ~hours-per-day~ still leaves time during that day, but start on the next day, if the previous task takes the entirety of the previous day.
 
+** Manually Linking Headlines
+In addition to linking headlines via the ~:ORDERED:~ property, headlines can be linked manually. In contrast to ordered subheadlines, which will link direct sibling headlines, manual links can be created to arbitrary headlines.
+
+In order to generate a manual link, create a property with a key that is in ~:linked-to-property-keys~: (or in the default variable ~org-gantt-default-linked-to-property-keys~, which is set to ~:linked-to~ by default). Any values of these property keys are interpreted as a comma separated list of ids. Links between the headline with the property and headlines with the given ids are created, and the start time of the linked headlines are computed from the end time of the original headline, if the linked-to headlines do not already have start times set.
+
+#+BEGIN: org-gantt-chart :id "linked-headlines" :use-id-subheadlines t
+\begin{ganttchart}[time slot format=isodate, vgrid={*2{dashed},*3{black},*2{dashed}}]{2015-07-08}{2015-07-20}
+\gantttitlecalendar{year, month=name, day}\\
+\ganttbar[bar left shift=0.0, bar right shift=-0.0, name=uniqueid1]{Task 1}{2015-07-08}{2015-07-09}\\
+\ganttbar[bar left shift=0.0, bar right shift=-0.0, name=task2]{Task 2}{2015-07-10}{2015-07-13}\\
+\ganttbar[bar left shift=0.0, bar right shift=-0.0, name=task3]{Task 3}{2015-07-16}{2015-07-20}\\
+\ganttgroup[group left shift=0.0, group right shift=-0.0, name=uniqueid2]{Task 4}{2015-07-10}{2015-07-15}\\
+  \ganttbar[bar left shift=0.0, bar right shift=-0.0, name=task5]{Task 5}{2015-07-10}{2015-07-15}\\
+\ganttlink{uniqueid1}{task2}
+\ganttlink{uniqueid1}{task5}
+\ganttlink{task5}{task3}
+\end{ganttchart}
+#+END
+
 ** Progress
-org-gantt can use [[orgmode.org/manual/Clocking-commands.html][clocking]] to calculate the progress on each item. However, the progress is currently simply calculated as the ratio of clocked time to estimated time, and thus does not constitute a realistic estimation of the real progress of a specific task. Nevertheless, it can be used to visualize progress on specific tasks.
-To show progress, use the parameter ~:show-progress~. Setting it to ~t~ will show the progress on all tasks. Setting it to ~if-clocksum~ will show progress only for those tasks with a clocksum, i.e. tasks that have been clocked, or that have subtasks that have been clocked.
+org-gantt can use [[orgmode.org/manual/Clocking-commands.html][clocking]] or [[http://orgmode.org/manual/Breaking-down-tasks.html][progress cookies]] to calculate the progress on each item. If clocking is used, the progress is currently simply calculated as the ratio of clocked time to estimated time, and thus does not constitute a realistic estimation of the real progress of a specific task. Nevertheless, it can be used to visualize progress on specific tasks. If progress cookies are used, their value is translated directly into a progress value, regardless of whether the cookie uses percentage or fractional display.
+To show progress, use the parameter ~:show-progress~. Setting it to ~always~ will show the progress on all tasks. Setting it to ~if-exists~ will show progress only for those tasks with a clocksum, i.e. tasks that have been clocked, or that have subtasks that have been clocked.
 
 #+BEGIN_SRC org
   ,* COMMENT Using Effort
@@ -224,7 +246,7 @@ To show progress, use the parameter ~:show-progress~. Setting it to ~t~ will sho
       :END:
 
 #+BEGIN: org-gantt-chart :id "clock-space-src" :use-id-subheadlines t \
-:show-progress if-clocksum 
+:show-progress if-exists
 #+END
 #+END_SRC
 
@@ -259,11 +281,20 @@ Creates the following gantt chart:
 \end{ganttchart}
 #+END
 
+The variable ~:progress-source~ can influence whether progress cookies or clocksum values are used for calculating the progress. ~cookie-clocksum~ (the default), prefers cookies, but also uses clocksums. ~clocksum-cookie~ prefers clocksums, but also uses cookies. ~clocksum~ and ~cookie~ will make org-gantt use only clocksums or cookies, respectively.
+
 ** Styling
 
 You can use all the styling parameters available in pgf-gantt (see the pgf-gantt manual for more information) by using the parameter ~:parameters~. The content of this parameter is pasted unchanged into the ganttchart parameter list. Remember that you have to escape backslashes in order for them to work. [fn:: Due to a bug in pgfgantt, it is advisable not to use the parameter ~today offset~. This parameter unintentionally influences progress rendering.]
-The exception to this are the pgf-gantt parameters ~time slot format~ and ~vgrid~. While ~time slot format~ is always set to ~isodate~ in order for org-gantt to work correctly, the ~vgrid~ parameter is used to emphasize the difference between weekend and work days. The default line style for those (settable via the custom variables ~org-gantt-default-weekend-style~ and ~org-gant-default-workday-style~) can be overwritten using the parameters ~:weekend-style~ and ~workday-style~.
+The exception to this are the pgf-gantt parameters ~time slot format~ and ~vgrid~. While ~time slot format~ is always set to ~isodate~ in order for org-gantt to work correctly, the ~vgrid~ parameter is used to emphasize the difference between weekend and work days. The default line style for those (settable via the custom variables ~org-gantt-default-weekend-style~ and ~org-gant-default-workday-style~) can be overwritten using the parameters ~:weekend-style~ and ~workday-style~. 
 
+*** Title Calendar
+The title calendar, represented by the pgfgantt command ~\pgftitlecalendar~, can be set with the parameter ~title-calendar~. Refer to the pgfgantt manual for all possible options.
+
+*** Compressing Charts
+pgfgantt offers an option for compressing charts that span a long time, so that instead of each day occupying one slot, each slot represents an entire month. org-gantt allows to activate the compression by setting the parameter ~:compress~ to non-nil. If compression is activated, you can use the variable ~compressed-title-calendar~ to style the title calendar. The distinction for title calendars is necessary, so that reasonable defaults can be supplied for both cases.
+
+*** Styling Example
 It therefore becomes possible to create styles such as the following (shamelessly stolen from the pgf gantt manual) - look at the source in org-gantt-manual.org for the full list of parameters:
 
 #+BEGIN: org-gantt-chart :id "clock-space" :use-id-subheadlines t :show-progress if-exists :workday-style "white" :weekend-style "black!10" :parameters "y unit title=0.4cm, y unit chart=0.5cm, title/.append style={draw=none, fill=RoyalBlue!50!black}, title label font=\\sffamily\\bfseries\\color{white}, title label node/.append style={below=-1.6ex}, title left shift=.05, title right shift=-.05, title height=1, bar/.append style={draw=none, fill=OliveGreen!75}, bar height=.6, bar label font=\\normalsize\\color{black!50}, group right shift=0, group top shift=.6, group height=.3, group peaks height=.2, bar incomplete/.append style={fill=Maroon}, canvas/.style={shape=rectangle, fill=black!5, draw=RoyalBlue!50!black, very thick}"
@@ -275,29 +306,47 @@ It therefore becomes possible to create styles such as the following (shamelessl
 \end{ganttchart}
 #+END
 
+
+
 * Reference
 ** Parameters
 #+LATEX: \noindent
 *General parameters:*
 {{{PARDESC(id, The scope of the gantt chart. If ~nil~\, use the current document. If it starts with ~file:\~\, use the given document. Otherwise\, use the headline with the given id property.)}}}
+{{{DPARDESC(maxlevel, The maximum subheadline level for which the gantt chart is generated.)}}}
 {{{PARDESC(use-id-subheadlines, Setting this parameter to t will make the gantt chart ignore the headline of the given id, and only use its subheadlines as top level groups.)}}}
 
 
 #+LATEX: \noindent
 *Calculation parameters:*
 {{{PARDESC(calc-progress, Setting this parameter to ~use-larger-100~ will make the progress calculation use values of larger 100 for overclocked subtasks. See section [[Progress]].)}}}
+{{{DPARDESC(progress-source, Determines the source that is used for progress calculation. ~clocksum~ will calculate from clocksums only. ~cookie~ will calculate from progress cookies in the headlines only. Both ~[%]~ and ~[/]~ cookies work. ~clocksum-cookie~ will use both\, but preference clocksums\, if both are available. ~cookie-clocksum~ will preference cookies.)}}}
 {{{DPARDESC(hours-per-day, Sets the number of work hours in a work day.)}}}
+{{{DPARDESC(work-free-days, The days on which no work is done\, normally weekends. Is a list of integers\, where each integer denotes a weekday\, from 0 (sunday) to 6 (monday).)}}}
+{{{DPARDESC(incomplete-date-headlines, Determines the treatment for that have either deadline or schedule (also computed)\, but not both. ~keep~ will place the headline normally, with a length of 0. ~inactive~ will place the headline, but distinguish it via inactive-style. ~ignore~ will not place the headline onto the chart.)}}}
+{{{DPARDESC(no-date-headlines, Determines the treatment for that have neither deadline nor schedule. ~keep~ will place the headline normally, with a length of 0. ~inactive~ will place the headline, but distinguish it via inactive-style. ~ignore~ will not place the headline onto the chart.)}}}
+{{{DPARDESC(tag-style-effect, Defines\, where tag styles should be applied. If ~current~\, a tag style is only applied to headlines with the appropriate tag. If ~subheadlines~\, a tag style is applied to the headline and all its subheadlines.)}}}
+{{{DPARDESC(use-tags, A list of tags. Only headlines with these tags (and their subheadlines) will be printed. If ~nil~, all headlines are printed.)}}}
+{{{DPARDESC(ignore-tags, A list of tags. Headlines with these tags (and all their subheadlines) will not be printed.)}}}
+{{{DPARDESC(milestone-tags, A list of tags. Headlines with these tags will be printed as milesontes)}}}
+{{{DPARDESC(linked-to-property-keys, A list of property keys. The values of these properties in headlines are interpreted as comma-seperated list\, which indicates the ids of other headlines. Those other headlines will be visually linked to the headline with the property\, and have its end time calculated\, unless it already has an end time.)}}}
 
 #+LATEX: \noindent
 *Style parameters:*
 {{{PARDESC(end-date, The end date of the chart. By default the date will be calculated as the latest date in the gantt chart.)}}}
 {{{PARDESC(parameters, Additional parameters added to the parameter list of the ~\begin{ganttchart}~ command. Any parameters allowed by pgfgantt can be used, except those mentioned in section [[Styling]].)}}}
-{{{PARDESC(show-progress, Setting this parameter to it to ~t~ will show the progress on all tasks. Setting it to ~if-clocksum~ will show progress only for those tasks with a clocksum\, i.e. tasks that have been clocked\, or that have subtasks that have been clocked. ~nil~ (the default) will not show progress on any tasks.)}}}
+{{{DPARDESC(show-progress, Setting this parameter to it to ~always~ will show the progress on all tasks. Setting it to ~if-exists~ will show progress only for those tasks with a clocksum\, i.e. tasks that have been clocked\, or that have subtasks that have been clocked. ~nil~ (the default) will not show progress on any tasks.)}}}
 {{{PARDESC(start-date, The start date of the chart. By default the date will be calculated as the earliest date in the gantt chart.)}}}
 {{{DPARDESC(title-calendar, Sets the title calendar\, that is the content of the pgfgantt command ~\ganttitlecalendar{content}~.)}}}
+{{{PARDESC(compress, If non-nil\, the chart will be compressed according to pgfgantt. In compressed mode\, only months are shown and not the days of each month.)}}}
+{{{DPARDESC(compressed-title-calendar, Sets the title calendar\, that is used if the chart is compressed.)}}}
 {{{PARDESC(today, If set to t\, the current date is highlighted as today in the gantt chart. If set to a timestamp\, the given date is highlighted as today. If not set\, no today value is used.)}}}
 {{{DPARDESC(weekend-style, The style used for delimiting weekend days.)}}}
 {{{DPARDESC(workday-style, The style used for delimiting workday days.)}}}
+{{{DPARDESC(inactive-bar-style, styles for bars that are considered inactive by ~:incomplete-date-headlines~ or ~:no-date-headlines~.)}}}
+{{{DPARDESC(inactive-group-style, styles for groups that are considered inactive by ~:incomplete-date-headlines~ or ~:no-date-headlines~.)}}}
+{{{DPARDESC(tags-bar-style, An alist that associates tags to styles for bars in the form ~(tag . style)~)}}}
+{{{DPARDESC(tags-group-style, An alist that associates tags to styles for groups in the form ~(tag . style)~)}}}
 
 * COMMENT org-gantt-todo
    :PROPERTIES:
@@ -369,6 +418,33 @@ It therefore becomes possible to create styles such as the following (shamelessl
     :Effort:   3d
     :END:
 
+* COMMENT Linked Headlines
+  :PROPERTIES:
+  :ID: linked-headlines
+  :END:      
+** Task 1
+   DEADLINE: <2015-07-09 Do> SCHEDULED: <2015-07-08 Mi>
+   :PROPERTIES:
+   :LINKED-TO: task2,task5
+   :END:
+** Task 2
+   :PROPERTIES:
+   :ID: task2
+   :Effort:   2d
+   :END:      
+** Task 3
+   :PROPERTIES:
+   :ID: task3
+   :Effort:   3d
+   :END:
+** Task 4
+*** Task 5
+    :PROPERTIES:
+    :ID: task5
+    :Effort:   4d
+    :LINKED-TO: task3
+    :END:
+
 * COMMENT Using Effort
    :PROPERTIES:
    :ID: clock-space
@@ -398,7 +474,8 @@ It therefore becomes possible to create styles such as the following (shamelessl
 ** DONE Correct Highlighting by tag
 ** Use org-depend dependencies
 ** DONE Milestones
-** LINKED-TO
+** DONE LINKED-TO
 * COMMENT Bugs
 ** If use-tags is used in a subelement of an ordered headline, a link from nowhere appears.
 ** Pulling in headlines from other files not working correctly.
+** LINKED-TO when current headline does not have endtime.
