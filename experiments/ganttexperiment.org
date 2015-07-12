@@ -72,9 +72,6 @@
 \gantttitlecalendar{year, month=name, day}\\
 \ganttgroup[group left shift=0.0, group right shift=-0.0, name=uniqueid1]{Something [1/4]}{2015-05-29}{2015-06-22}\\
   \ganttbar[bar left shift=0.0, bar right shift=-0.0, name=uniqueid2]{Else  [32]}{2015-05-29}{2015-06-22}\\
-  \ganttbar[bar left shift=0.0, bar right shift=0, name=uniqueid3]{don't bother}{2015-05-15}{2015-05-15}\\
-  \ganttbar[bar left shift=0.0, bar right shift=0, name=uniqueid4]{one}{2015-05-15}{2015-05-15}\\
-  \ganttbar[bar left shift=0.0, bar right shift=0, name=uniqueid5]{two}{2015-05-15}{2015-05-15}\\
 \ganttgroup[group left shift=0.0, group right shift=-0.0, name=ordered123, group label font=\color{blue}]{Ordered-Test}{2015-05-22}{2015-05-26}\\
   \ganttbar[bar left shift=0.0, bar right shift=-0.0, name=uniqueid6, bar label font=\color{blue}]{Order1}{2015-05-22}{2015-05-22}\\
   \ganttlinkedbar[bar left shift=0.0, bar right shift=-0.0, name=uniqueid7, bar label font=\color{blue}]{Order2}{2015-05-25}{2015-05-26}\\
