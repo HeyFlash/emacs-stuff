@@ -451,12 +451,14 @@ that are converted to numbers. Then the time is calculated from the values."
                       (* 3600 (org-gantt-string-to-number hours-string))))
          (calc-days (/ ex-hours (org-gantt-hours-per-day)))
          (rest-hours (% ex-hours (org-gantt-hours-per-day)))
+	 (work-free-days (plist-get org-gantt-options :work-free-days))
          (time
           (seconds-to-time
            (+ (org-gantt-string-to-number seconds-string)
               (* 60 (org-gantt-string-to-number minutes-string))
               (* 3600 (org-gantt-string-to-number hours-string))
               (* 3600 (or hours-per-day (org-gantt-hours-per-day)) (org-gantt-string-to-number days-string))
+	      (* 3600 (or hours-per-day (org-gantt-hours-per-day)) (- 7 (length work-free-days)) (org-gantt-string-to-number weeks-string))
               (* 3600 (or hours-per-day (org-gantt-hours-per-day)) 30 (org-gantt-string-to-number months-string))
               (* 3600 (or hours-per-day (org-gantt-hours-per-day)) 30 12 (org-gantt-string-to-number years-string))))))
     (if (= 0 (apply '+ time))
@@ -476,7 +478,7 @@ Optional HOURS-PER-DAY makes it possible to convert hour estimates into workdays
               (dsp (if weeks-string (match-end 0) wsp))
               (days-string (org-gantt-substring-if effort dsp (string-match "d" effort)))
               (hsp (if days-string (match-end 0) dsp))
-              (hours-string (org-gantt-substring-if effort hsp (string-match ":" effort)))
+              (hours-string (org-gantt-substring-if effort hsp (string-match ":\\|\\'" effort)))
               (minsp (if hours-string (match-end 0) hsp))
               (minutes-string (org-gantt-substring-if effort minsp (length effort))))
          (org-gantt-strings-to-time "0"
