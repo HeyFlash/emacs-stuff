@@ -30,8 +30,10 @@
 ;;; Code:
 
 (require 'calendar)
+(require 'cl-lib)
 
-(defgroup org-gantt nil "Customization of org-gantt.")
+(defgroup org-gantt nil "Customization of org-gantt."
+  :group 'org)
 
 (defcustom org-gantt-default-hours-per-day 8
   "The default hours in a workday.
@@ -181,6 +183,12 @@ as a latex comment after each gantt bar."
   :type '(boolean)
   :group 'org-gantt)
 
+(defcustom org-gantt-default-hgrid nil
+  "The option :hgrid decides whether hgrid lines are shown.
+This is the default setting for :hgrid."
+  :type '(boolean)
+  :group 'org-gantt)
+
 (defconst org-gantt-start-prop :startdate
   "What is used as the start property in the constructed property list.")
 
@@ -234,6 +242,9 @@ Is filled with local or default options.")
   "Global variable for storing manually given links.
 Is used to create the manual links between elements at the end.")
 
+(defvar org-gantt-hours-per-day-gv 8
+  "Global variable for hours per day.")
+
 (defun org-gantt-hours-per-day ()
   "Get the hours per day."
   org-gantt-hours-per-day-gv)
@@ -264,7 +275,7 @@ If KEY is not found, or TABLE is nil, return DFLT which defaults to nil."
        (catch 'flag (maphash (lambda (x y)
                                (or (org-gantt-equal (gethash x table2) y)
                                    (throw 'flag nil)))
-                             table11)
+                             table1)
               (throw 'flag t))))
 
 (defun org-gantt-equal (item1 item2)
@@ -651,9 +662,9 @@ ENDTIME is the time where the previous bar ends."
 	 (hours (nth 3 dt))
 	 (minutes (nth 2 dt)))
     (if (and (= (org-gantt-hours-per-day) hours)
-	     (= 0 minutes))
-	(org-gantt-change-worktime
-         endtime (encode-time (* 3600 (- 24 (org-gantt-hours-per-day))))
+             (= 0 minutes))
+        (org-gantt-change-worktime
+         endtime (encode-time (* 3600 (- 24 (org-gantt-hours-per-day))) 0 0 0 0 0)
          #'time-add
          #'org-gantt-day-start #'org-gantt-day-end)
       endtime)))
@@ -743,7 +754,7 @@ FIXME this is not working."
     (let ((linked-ids (gethash org-gantt-linked-to-prop headline))
 	  (orig-id (gethash org-gantt-id-prop headline)))
       (when linked-ids
-	(message "FOUN ids %s" linked-ids))
+	(message "FOUND ids %s" linked-ids))
       (dolist (linked-id linked-ids)
 	(let ((found-headline
 	       (org-gantt-find-headline-with-id complete-headline-list linked-id)))
@@ -752,7 +763,7 @@ FIXME this is not working."
 		     (not (gethash org-gantt-start-prop found-headline))
 		     (gethash org-gantt-end-prop headline))
 	    (setq *org-gantt-changed-in-propagation* t)
-	    (message "PROPagatin linked-to %s" found-headline)
+	    (message "PROPAGATIN linked-to %s" found-headline)
 	    (puthash
 	     orig-id
 	     (append (gethash orig-id *org-gantt-link-hash*) (list linked-id))
@@ -1002,11 +1013,12 @@ to the start of the next day."
         (if (> es 0) (round (* 100  (/ css es)))  0))
     0))
 
-(defun org-gantt-get-shifts (up-start down-end compress)
+(defun org-gantt-get-shifts (up-start down-end compress &optional subelements)
   "Return the string describing the shift for pgf-gantt.
 Calculate the shift from UP-START and DOWN-END. 
 If compress is non-nil calculate month shifts,
-otherwise, calculate day shifts."
+otherwise, calculate day shifts.
+Use \"group left shift=\" instead of \"bar left shift=\" for SUBELEMENTS."
   (concat
    (if subelements "group left shift=" "bar left shift=")
    (number-to-string
@@ -1048,12 +1060,13 @@ Return nil, if stats-cookie is not readable."
 	     (number-to-string progress)))
 	  (t nil))))
 
-(defun org-gantt-info-to-pgfgantt (gi default-date level &optional prefix ordered linked)
+(defun org-gantt-info-to-pgfgantt (gi default-date level &optional prefix ordered linked last)
   "Create a pgfgantt string from gantt-info GI.
 Prefix the created string with PREFIX.
 ORDERED determines whether the current headaline is ordered
 \(Required for correct linking of sub-subheadlines\).
-Create a bar linked to the previous bar, if LINKED is non-nil."
+Create a bar linked to the previous bar, if LINKED is non-nil.
+LAST should be non-nil for the last gant-info in the Gant Chart."
   (when gi
     (let* ((subelements (gethash :subelements gi))
 	   (id (gethash org-gantt-id-prop gi))
@@ -1125,7 +1138,7 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 		  (t
 		   (if linked "\\ganttlinkedbar" "\\ganttbar")))
 	    "["
-	    (org-gantt-get-shifts up-start down-end compress)
+	    (org-gantt-get-shifts up-start down-end compress subelements)
 	    (when id (concat ", name=" id))
 	    (cond
 	     ((equal show-progress 'always)
@@ -1195,7 +1208,7 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 		 (if (not (equal no-date-headlines 'ignore))
 		     (format-time-string "%Y-%m-%d" default-date)))
 	       "}"))
-	    "\\\\"
+	    (and (or subelements (null last)) "\\\\")
 	    (when org-gantt-output-debug-dates
 	      (concat
 	       "%"
@@ -1224,18 +1237,18 @@ Create a bar linked to the previous bar, if LINKED is non-nil."
 	    default-date
 	    (+ level 1)
 	    (concat prefix "  ")
-	    (or ordered (gethash :ordered gi)))))))))
+	    (or ordered (gethash :ordered gi)) last)))))))
 
-(defun org-gantt-info-list-to-pgfgantt (data default-date level &optional prefix ordered)
+(defun org-gantt-info-list-to-pgfgantt (data default-date level &optional prefix ordered last)
   "Return a pgfgantt string representing DATA.
 Prefix each line of the created representation with PREFIX.
-Create correctly linked representation, if ORDERED is non-nil."
-  (concat
-   (org-gantt-info-to-pgfgantt (car data) default-date level prefix ordered nil)
-   (mapconcat (lambda (datum)
-                (org-gantt-info-to-pgfgantt datum default-date level prefix ordered ordered))
-              (cdr data)
-              "")))
+Create correctly linked representation, if ORDERED is non-nil.
+LAST should be non-nil for the last gant-info in the Gant Chart."
+  (apply #'concat
+	 (org-gantt-info-to-pgfgantt (car data) default-date level prefix ordered nil (and last (null (cdr data))))
+	 (cl-loop for datum on (cdr data)
+		  collect
+		  (org-gantt-info-to-pgfgantt (car datum) default-date level prefix ordered ordered (and last (null (cdr datum)))))))
 
 (defun org-gantt-linkhash-to-pgfgantt (linkhash)
   "Return a pgfgantt string representing the links in LINKHASH."
@@ -1305,6 +1318,7 @@ PARAMS determine several options of the gantt chart."
       (setq org-gantt-hours-per-day-gv (or (plist-get params :hours-per-day) org-gantt-default-hours-per-day))
       (let* ((titlecalendar (or (plist-get params :title-calendar) org-gantt-default-title-calendar))
 	     (compressed-titlecalendar (or (plist-get params :compressed-title-calendar) org-gantt-default-compressed-title-calendar))
+	     (hgrid (if (plist-member params :hgrid) (plist-get params :hgrid) org-gantt-default-hgrid))
              (start-date (plist-get params :start-date))
              (end-date (plist-get params :end-date))
              (start-date-list (and start-date (org-parse-time-string start-date)))
@@ -1416,6 +1430,8 @@ PARAMS determine several options of the gantt chart."
           "\\begin{ganttchart}[time slot format=isodate, "
           "vgrid="
           (org-gantt-get-vgrid-style start-date-time weekend-style workday-style)
+	  (when hgrid
+	    ", hgrid")
 	  (when compress
 	    ", compress calendar")
           (when today-value
@@ -1438,7 +1454,7 @@ PARAMS determine several options of the gantt chart."
 	      compressed-titlecalendar
 	    titlecalendar)
           "}\\\\\n"
-          (org-gantt-info-list-to-pgfgantt org-gantt-info-list start-date-time 1)
+          (org-gantt-info-list-to-pgfgantt org-gantt-info-list start-date-time 1 nil nil t)
 	  (org-gantt-linkhash-to-pgfgantt *org-gantt-link-hash*)
           "\\end{ganttchart}"
           (when tikz-options
