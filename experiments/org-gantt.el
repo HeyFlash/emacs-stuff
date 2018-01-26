@@ -535,7 +535,7 @@ that are converted to numbers. Then the time is calculated from the values."
               (* 60 (org-gantt-string-to-number minutes-string))
               (* 3600 (org-gantt-string-to-number hours-string))
               (* 3600 (or hours-per-day (org-gantt-hours-per-day)) (org-gantt-string-to-number days-string))
-              (* 3600 (or hours-per-day (org-gantt-hours-per-day)) (- 7 (length work-free-days)))
+              (* 3600 (or hours-per-day (org-gantt-hours-per-day)) (- 7 (length work-free-days)) (org-gantt-string-to-number weeks-string))
               (* 3600 (or hours-per-day (org-gantt-hours-per-day)) 30 (org-gantt-string-to-number months-string))
               (* 3600 (or hours-per-day (org-gantt-hours-per-day)) 30 12 (org-gantt-string-to-number years-string))))))
     (if (= 0 (apply '+ time))
